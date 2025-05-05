@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Stable Baselines / ML Models & Logs
+models/
+logs/
+*.zip
+*.pkl
+*.h5
+*.pt
+*.pth
+*.onnx
+*.log
+
+# IDE / OS generated
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+.DS_Store
+
+# Other (add any specific files you want to ignore)
+# data/  # If you have large datasets
