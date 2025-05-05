@@ -92,33 +92,33 @@ python train.py \
   --height 4 \
   --n_mines 3 \
   --device "cuda" \
-  --vec_env_type "subproc" \
-```
+  --vec_env_type "subproc"
 
-* --total_timesteps: Total steps for training (Default: 1000000)
-* --n_envs: Number of parallel environments (Default: 4)
-* --n_steps: Steps per env per update (Default: 1024)
-* --batch_size: Minibatch size (Default: 128)
-* --n_epochs: Optimization epochs per update (Default: 10)
-* --learning_rate / --lr: Learning rate (Default: 0.0001)
-* --ent_coef: Entropy coefficient (Default: 0.01)
-* --gamma: Discount factor (Default: 0.99)
-* --gae_lambda: GAE lambda factor (Default: 0.90)
-* --clip_range: PPO clipping parameter (Default: 0.2)
-* --vf_coef: Value function loss coefficient (Default: 1.0)
-* --features_dim: CNN output features dimension (Default: 128)
-* --pi_layers: Policy head layers, comma-separated (Default: "64,64")
-* --vf_layers: Value head layers, comma-separated (Default: "256,256")
-* --log_dir: TensorBoard log directory (Default from config.py, suggest GDrive)
-* --model_dir: Model/Stats save directory (Default from config.py, suggest GDrive)
-* --model_prefix: Prefix for saved files (Default from config.py) - IMPORTANT for identifying runs
-* --tb_log_name: TensorBoard log name (Default from config.py) - Will have WxHxM appended
-* --width: Environment grid width (Default from config.py)
-* --height: Environment grid height (Default from config.py)
-* --n_mines: Number of mines (Default from config.py)
-* --seed: Random seed for reproducibility (Default: None)
-* --device: Training device ('auto', 'cpu', 'cuda') (Default: 'auto') - Use 'cuda' on Colab GPU
-* --vec_env_type: VecEnv type ('subproc', 'dummy') (Default: 'subproc')
+# --total_timesteps: Total steps for training (Default: 1000000)
+# --n_envs: Number of parallel environments (Default: 4)
+# --n_steps: Steps per env per update (Default: 1024)
+# --batch_size: Minibatch size (Default: 128)
+# --n_epochs: Optimization epochs per update (Default: 10)
+# --learning_rate / --lr: Learning rate (Default: 0.0001)
+# --ent_coef: Entropy coefficient (Default: 0.01)
+# --gamma: Discount factor (Default: 0.99)
+# --gae_lambda: GAE lambda factor (Default: 0.90)
+# --clip_range: PPO clipping parameter (Default: 0.2)
+# --vf_coef: Value function loss coefficient (Default: 1.0)
+# --features_dim: CNN output features dimension (Default: 128)
+# --pi_layers: Policy head layers, comma-separated (Default: "64,64")
+# --vf_layers: Value head layers, comma-separated (Default: "256,256")
+# --log_dir: TensorBoard log directory (Default from config.py, suggest GDrive)
+# --model_dir: Model/Stats save directory (Default from config.py, suggest GDrive)
+# --model_prefix: Prefix for saved files (Default from config.py) - IMPORTANT for identifying runs
+# --tb_log_name: TensorBoard log name (Default from config.py) - Will have WxHxM appended
+# --width: Environment grid width (Default from config.py)
+# --height: Environment grid height (Default from config.py)
+# --n_mines: Number of mines (Default from config.py)
+# --seed: Random seed for reproducibility (Default: None)
+# --device: Training device ('auto', 'cpu', 'cuda') (Default: 'auto') - Use 'cuda' on Colab GPU
+# --vec_env_type: VecEnv type ('subproc', 'dummy') (Default: 'subproc')
+```
 
 **Monitoring with TensorBoard:**
 During or after training, you can monitor progress using TensorBoard:
@@ -126,6 +126,11 @@ During or after training, you can monitor progress using TensorBoard:
 ```bash
 # Point to the directory specified by --log_dir (or the default ./logs/)
 tensorboard --logdir ./logs/
+
+# for Colab
+# %load_ext tensorboard
+# %tensorboard --logdir ./logs
+
 ```
 
 ## Playing and Evaluating (play.py)
