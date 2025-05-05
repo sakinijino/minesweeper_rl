@@ -44,6 +44,7 @@ if __name__ == '__main__':
                         help="Comma-separated layer sizes for the policy network head (e.g., '128,64')")
     parser.add_argument("--vf_layers", type=str, default="256,256",
                         help="Comma-separated layer sizes for the value network head (e.g., '512,256')")
+    parser.add_argument("--checkpoint_freq", type=int, default=50000, help="Total steps between checkpoints")
 
     # --- Paths and Naming (Defaults from config.py) ---
     parser.add_argument("--log_dir", type=str, default=config.LOG_DIR, help="Directory for TensorBoard logs")
@@ -122,12 +123,12 @@ if __name__ == '__main__':
 
 
     # --- Checkpoint Callback ---
-    # Save a checkpoint every N steps, where N is roughly 50k total steps
-    save_freq_per_env = max(50000 // args.n_envs, 1)
+    # Save a checkpoint every N steps, where N is roughly checkpoint_freq total steps
+    save_freq_per_env = max(args.checkpoint_freq // args.n_envs, 1)
     checkpoint_callback = CheckpointCallback(
         save_freq=save_freq_per_env,
         save_path=args.model_dir,
-        name_prefix=args.model_prefix,
+        name_prefix=f"{args.model_prefix}_{args.width}x{args.height}x{args.n_mines}",
         save_replay_buffer=True, # Save replay buffer for off-policy algos (doesn't hurt for PPO)
         save_vecnormalize=True # Save VecNormalize statistics automatically
     )

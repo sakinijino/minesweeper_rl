@@ -84,6 +84,7 @@ python train.py \
   --features_dim 128 \
   --pi_layers "64,64" \
   --vf_layers "256,256" \
+  --checkpoint_freq 50000 \
   --log_dir "./logs" \
   --model_dir "./models" \
   --model_prefix "maskedppo_run" \
@@ -108,6 +109,7 @@ python train.py \
 # --features_dim: CNN output features dimension (Default: 128)
 # --pi_layers: Policy head layers, comma-separated (Default: "64,64")
 # --vf_layers: Value head layers, comma-separated (Default: "256,256")
+# --checkpoint_freq: Total steps between checkpoints (Default: 50000)
 # --log_dir: TensorBoard log directory (Default from config.py, suggest GDrive)
 # --model_dir: Model/Stats save directory (Default from config.py, suggest GDrive)
 # --model_prefix: Prefix for saved files (Default from config.py) - IMPORTANT for identifying runs
