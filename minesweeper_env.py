@@ -7,7 +7,9 @@ import random
 class MinesweeperEnv(gym.Env):
     metadata = {'render_modes': ['human', 'rgb_array'], 'render_fps': 4}
 
-    def __init__(self, width=10, height=10, n_mines=10, render_mode='human'):
+    def __init__(self, width=10, height=10, n_mines=10, render_mode='human',
+                 reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1,
+                 max_reward_per_step=None):
         super().__init__()
 
         self.width = width
@@ -17,11 +19,13 @@ class MinesweeperEnv(gym.Env):
         self.action_space_size = height * width
         self.render_mode = render_mode
 
-        # 状态空间: (height, width) 的网格，每个单元格表示状态
-        # -2: 未揭开 (Unknown)
-        # -1: 地雷 (Mine) - 仅内部表示，观察中不直接暴露
-        # 0-8: 已揭开，数字表示邻近地雷数
-        #self.observation_space = spaces.Box(low=-2, high=8, shape=self.grid_size, dtype=np.int32)
+        # 奖励设置
+        self.reward_win = reward_win  # 胜利奖励
+        self.reward_lose = reward_lose  # 失败惩罚
+        self.reward_reveal = reward_reveal  # 每揭开一个安全格子的奖励
+        self.reward_invalid = reward_invalid  # 点击已揭开格子的惩罚
+        self.max_reward_per_step = max_reward_per_step  # 单步最大奖励限制
+
         # 修改为 (添加通道维度, 使用 float32):
         # 注意：low 和 high 可以根据你的归一化策略调整，这里暂时保持原逻辑范围
         # 但建议在 _get_obs 中进行归一化，并将 low/high 设置为归一化后的范围，例如 0/1 或 -1/1
@@ -155,11 +159,11 @@ class MinesweeperEnv(gym.Env):
 
         if self.revealed[row, col]:
             # 点击已揭开的格子 -> 惩罚
-            reward = -0.1 # 或更大的惩罚 [31]
+            reward = self.reward_invalid
             # terminated = True # 可以选择是否因此结束游戏
         elif self.mines[row, col]:
             # 点击到地雷 -> 失败，大惩罚
-            reward = -1.0 # 失败惩罚 [31, 32]
+            reward = self.reward_lose
             self.revealed[row, col] = True
             self.board[row, col] = -1 # 标记为地雷
             self.game_over = True
@@ -167,17 +171,21 @@ class MinesweeperEnv(gym.Env):
             truncated = True
             self.win = False
         else:
-            # 点击到安全格子 -> 揭开，小奖励
-            if self.neighbor_counts[row, col] == 0:
-                reward = 0.2 # 揭开安全格子的基础奖励 [31, 32, 33]
-            else:
-                reward = 0.1
+            # 点击到安全格子 -> 揭开，奖励为揭开的格子数量 * reward_reveal
+            revealed_before = np.sum(self.revealed)
             self._reveal_cell(row, col)
-            # 可以增加奖励，例如基于揭开的格子数量或接近胜利
-            # reward += 0.01 * np.sum(self.revealed)
+            revealed_after = np.sum(self.revealed)
+            revealed_count = revealed_after - revealed_before
+            
+            # 计算基础奖励
+            reward = revealed_count * self.reward_reveal
+            
+            # 如果设置了单步最大奖励限制，则对奖励进行裁剪
+            if self.max_reward_per_step is not None:
+                reward = min(reward, self.max_reward_per_step)
 
             if self._check_win():
-                reward = 1.0 # 胜利奖励 [31, 32]
+                reward += self.reward_win
                 self.game_over = True
                 terminated = True
                 self.win = True

@@ -92,6 +92,11 @@ python train.py \
   --width 4 \
   --height 4 \
   --n_mines 3 \
+  --reward-win 1.0 \       
+  --reward-lose -1.0 \
+  --reward-reveal 0.1 \    
+  --reward-invalid -0.1 \
+  --max-reward-per-step 0.2 \
   --device "cuda" \
   --vec_env_type "subproc"
 
@@ -117,6 +122,11 @@ python train.py \
 # --width: Environment grid width (Default from config.py)
 # --height: Environment grid height (Default from config.py)
 # --n_mines: Number of mines (Default from config.py)
+# --reward-win: Reward for winning the game (Default from config.py)
+# --reward-lose: Penalty for hitting a mine (Default from config.py)
+# --reward-reveal: Reward for revealing a safe cell (Default from config.py)
+# --reward-invalid: Penalty for clicking revealed cells (Default from config.py)
+# --max-reward-per-step: Maximum reward in one step (Default from config.py)
 # --seed: Random seed for reproducibility (Default: None)
 # --device: Training device ('auto', 'cpu', 'cuda') (Default: 'auto') - Use 'cuda' on Colab GPU
 # --vec_env_type: VecEnv type ('subproc', 'dummy') (Default: 'subproc')
