@@ -92,9 +92,9 @@ python train.py \
   --width 4 \
   --height 4 \
   --n_mines 3 \
-  --reward-win 1.0 \       
+  --reward-win 1.0 \
   --reward-lose -1.0 \
-  --reward-reveal 0.1 \    
+  --reward-reveal 0.1 \
   --reward-invalid -0.1 \
   --max-reward-per-step 0.2 \
   --device "cuda" \
