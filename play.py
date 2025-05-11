@@ -21,9 +21,6 @@ def run_batch_mode(args):
     Uses configuration from the 'args' object.
     """
     print(f"--- Running Batch Mode ({args.num_episodes} episodes) ---")
-    if args.seed is not None:
-        set_random_seed(args.seed)
-        print(f"Using random seed: {args.seed}")
 
     # --- Environment Creation (No Rendering) ---
     def create_env_instance():
@@ -42,6 +39,11 @@ def run_batch_mode(args):
 
     # Use DummyVecEnv for batch mode as well (simpler for single env evaluation)
     env = DummyVecEnv([lambda: create_env_instance()])
+
+    if args.seed is not None:
+        set_random_seed(args.seed)
+        env.seed(args.seed)
+        print(f"Using random seed: {args.seed}")
 
     # --- Load VecNormalize stats IF path is provided and exists ---
     stats_path = args.stats_path # Use arg value
@@ -127,10 +129,6 @@ def run_interactive_mode(args):
     print("--- Running Interactive Mode ---")
     player_type = "Human" if args.human else "Agent"
     print(f"Player: {player_type}")
-    if args.seed is not None:
-        set_random_seed(args.seed)
-        print(f"Using random seed: {args.seed}")
-
 
      # Statistics tracking
     total_games = 0
@@ -155,6 +153,11 @@ def run_interactive_mode(args):
     env_instance = create_env_instance()
     # Wrap in DummyVecEnv for SB3 compatibility
     env = DummyVecEnv([lambda: env_instance])
+
+    if args.seed is not None:
+        set_random_seed(args.seed)
+        env.seed(args.seed)
+        print(f"Using random seed: {args.seed}")
 
     # --- Load VecNormalize stats IF path is provided and exists ---
     stats_path = args.stats_path # Use arg value

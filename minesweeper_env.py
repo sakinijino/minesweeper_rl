@@ -73,7 +73,7 @@ class MinesweeperEnv(gym.Env):
         # 返回辅助信息，例如剩余地雷数、是否胜利等
         return {"remaining_mines": self.n_mines - np.sum(self.flags),
                 "revealed_cells": np.sum(self.revealed),
-                "is_win": self._check_win()}
+                "is_success": self.win}
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -168,7 +168,6 @@ class MinesweeperEnv(gym.Env):
             self.board[row, col] = -1 # 标记为地雷
             self.game_over = True
             terminated = True
-            truncated = True
             self.win = False
         else:
             # 点击到安全格子 -> 揭开，奖励为揭开的格子数量 * reward_reveal
