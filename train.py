@@ -56,11 +56,11 @@ if __name__ == '__main__':
     parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
     parser.add_argument("--height", type=int, default=config.HEIGHT, help="Height of the Minesweeper grid")
     parser.add_argument("--n_mines", type=int, default=config.N_MINES, help="Number of mines in the grid")
-    parser.add_argument("--reward-win", type=float, default=config.REWARD_WIN, help="Reward for winning the game")
-    parser.add_argument("--reward-lose", type=float, default=config.REWARD_LOSE, help="Penalty for hitting a mine")
-    parser.add_argument("--reward-reveal", type=float, default=config.REWARD_REVEAL, help="Reward for revealing a safe cell")
-    parser.add_argument("--reward-invalid", type=float, default=config.REWARD_INVALID, help="Penalty for clicking revealed cells")
-    parser.add_argument("--max-reward-per-step", type=float, default=config.MAX_REWARD_PER_STEP, help="Maximum reward in one step")
+    parser.add_argument("--reward_win", type=float, default=config.REWARD_WIN, help="Reward for winning the game")
+    parser.add_argument("--reward_lose", type=float, default=config.REWARD_LOSE, help="Penalty for hitting a mine")
+    parser.add_argument("--reward_reveal", type=float, default=config.REWARD_REVEAL, help="Reward for revealing a safe cell")
+    parser.add_argument("--reward_invalid", type=float, default=config.REWARD_INVALID, help="Penalty for clicking revealed cells")
+    parser.add_argument("--max_reward_per_step", type=float, default=config.MAX_REWARD_PER_STEP, help="Maximum reward in one step")
 
     # --- Other Settings ---
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
