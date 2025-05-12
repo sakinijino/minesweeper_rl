@@ -11,6 +11,7 @@ venv/
 # Stable Baselines / ML Models & Logs
 models/
 logs/
+training_runs/
 *.zip
 *.pkl
 *.h5

@@ -85,15 +85,13 @@ python train.py \
   --pi_layers "64,64" \
   --vf_layers "256,256" \
   --checkpoint_freq 50000 \
-  --log_dir "./logs" \
-  --model_dir "./models" \
-  --model_prefix "maskedppo_run" \
-  --tb_log_name "MinesweeperExperiment" \
-  --width 4 \
-  --height 4 \
+  --experiment_base_dir "./training_runs" \
+  --model_prefix "ppo_run" \
+  --width 5 \
+  --height 5 \
   --n_mines 3 \
-  --reward_win 1.0 \
-  --reward_lose -1.0 \
+  --reward_win 0.2 \
+  --reward_lose -0.05 \
   --reward_reveal 0.1 \
   --reward_invalid -0.1 \
   --max_reward_per_step 0.2 \
@@ -116,10 +114,8 @@ python train.py \
 # --pi_layers: Policy head layers, comma-separated (Default: "64,64")
 # --vf_layers: Value head layers, comma-separated (Default: "256,256")
 # --checkpoint_freq: Total steps between checkpoints (Default: 50000)
-# --log_dir: TensorBoard log directory (Default from config.py, suggest GDrive)
-# --model_dir: Model/Stats save directory (Default from config.py, suggest GDrive)
+# --experiment_base_dir: Base directory for all training run outputs (Default from config.py)
 # --model_prefix: Prefix for saved files (Default from config.py) - IMPORTANT for identifying runs
-# --tb_log_name: TensorBoard log name (Default from config.py) - Will have WxHxM appended
 # --width: Environment grid width (Default from config.py)
 # --height: Environment grid height (Default from config.py)
 # --n_mines: Number of mines (Default from config.py)
@@ -138,12 +134,11 @@ During or after training, you can monitor progress using TensorBoard:
 
 ```bash
 # Point to the directory specified by --log_dir (or the default ./logs/)
-tensorboard --logdir ./logs/
+tensorboard --logdir ./training_runs/
 
 # for Colab
 # %load_ext tensorboard
-# %tensorboard --logdir ./logs
-
+# %tensorboard --logdir ./training_runs/
 ```
 
 ## Playing and Evaluating (play.py)
@@ -156,23 +151,15 @@ The play.py script allows you to interact with the environment or test a trained
 Specify the parameters matching the training run of the model you want to load.
 ```bash
 python play.py \
-  --model_dir "./models" \
-  --model_prefix "maskedppo_run" \
-  --width 4 \
-  --height 4 \
+  --training_run_dir ./training_runs/ppo_run_4x4x3_seed42_20250512-224809/ \
+  --width 5 \
+  --height 5 \
   --n_mines 3 \
   --delay 0.2 \
+  --seed 42 \
   --device "cuda"
-```
 
-**Play Manually (Interactive)**
-(Note: Requires a graphical display.)
-```bash
-python play.py \
-  --human \
-  --width 4 \
-  --height 4 \
-  --n_mines 3
+# --training_run_dir: Directory to training dir of save models and stats
 ```
 
 **Agent Batch Evaluation (No Graphics)**
@@ -180,12 +167,23 @@ Run the agent for a specified number of episodes and calculate the win rate. Ide
 ```bash
 python play.py \
   --batch \
-  --num-episodes 200 \
-  --model_dir "./models" \
-  --model_prefix "maskedppo_run" \
-  --width 4 \
-  --height 4 \
+  --num_episodes 200 \
+  --training_run_dir ./training_runs/ppo_run_4x4x3_seed42_20250512-224809/
+  --width 5 \
+  --height 5 \
   --n_mines 3 \
   --seed 42 \
   --device "cuda"
+
+# --training_run_dir: Directory to training dir of save models and stats
+```
+
+**Play Manually (Interactive)**
+(Note: Requires a graphical display.)
+```bash
+python play.py \
+  --human \
+  --width 5 \
+  --height 5 \
+  --n_mines 3
 ```

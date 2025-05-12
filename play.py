@@ -94,7 +94,7 @@ def run_batch_mode(args):
             obs, reward, terminated_arr, info_arr = env.step(action)
             terminated = terminated_arr[0]
             actual_info = info_arr[0] # Access the info dict from the underlying env
-            won_episode = actual_info.get('is_win', False) # Check if 'is_win' exists in info
+            won_episode = actual_info.get('is_success', False) # Check if 'is_success' exists in info
             truncated = actual_info.get('TimeLimit.truncated', False)
             reward = reward[0] # Get reward from the single env
             # obs is already updated
@@ -236,7 +236,7 @@ def run_interactive_mode(args):
                  obs, reward, terminated_arr, info_arr = env.step(action) # Step the VecEnv
                  terminated = terminated_arr[0]
                  actual_info = info_arr[0] # Get info from the single underlying env
-                 current_game_won = actual_info.get('is_win', False)
+                 current_game_won = actual_info.get('is_success', False)
                  truncated = actual_info.get('TimeLimit.truncated', False)
                  reward = reward[0] # Get reward from the single env
                  # obs is already updated
@@ -300,11 +300,10 @@ if __name__ == "__main__":
     # --- Mode Selection ---
     parser.add_argument("--human", action="store_true", help="Enable human play mode (interactive).")
     parser.add_argument("--batch", action="store_true", help="Enable batch mode (agent plays without rendering).")
-    parser.add_argument("--num-episodes", type=int, default=100, help="Number of episodes to run in batch mode.")
+    parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run in batch mode.")
 
-    # --- Paths and Naming (Defaults from config.py) ---
-    parser.add_argument("--model_dir", type=str, default=config.MODEL_DIR, help="Directory to save models and stats")
-    parser.add_argument("--model_prefix", type=str, default=config.MODEL_PREFIX, help="Prefix for saved model files and VecNormalize stats")
+    # --- Paths and Naming ---
+    parser.add_argument("--training_run_dir", type=str, default=config.EXPERIMENT_BASE_DIR, help="Directory to training dir of save models and stats")
 
     # --- Environment Parameters ---
     parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
@@ -329,9 +328,8 @@ if __name__ == "__main__":
         print(f"{arg}: {value}")
     print("--------------------------")
 
-    args.model_path = os.path.join(args.model_dir, f"{args.model_prefix}_{args.width}x{args.height}x{args.n_mines}_final.zip")
-    args.stats_path = os.path.join(args.model_dir, f"{args.model_prefix}_{args.width}x{args.height}x{args.n_mines}_vecnormalize.pkl")
-
+    args.model_path = os.path.join(args.training_run_dir, "models", "final_model.zip")
+    args.stats_path = os.path.join(args.training_run_dir, "models", "final_stats_vecnormalize.pkl")
 
     # --- Run Selected Mode ---
     if args.batch:

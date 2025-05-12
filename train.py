@@ -1,5 +1,5 @@
 # train.py
-import os
+import os, datetime, json
 import argparse
 import gymnasium as gym
 from sb3_contrib import MaskablePPO
@@ -47,10 +47,8 @@ if __name__ == '__main__':
     parser.add_argument("--checkpoint_freq", type=int, default=50000, help="Total steps between checkpoints")
 
     # --- Paths and Naming (Defaults from config.py) ---
-    parser.add_argument("--log_dir", type=str, default=config.LOG_DIR, help="Directory for TensorBoard logs")
-    parser.add_argument("--model_dir", type=str, default=config.MODEL_DIR, help="Directory to save models and stats")
+    parser.add_argument("--experiment_base_dir", type=str, default=config.EXPERIMENT_BASE_DIR, help="Base directory for all training run outputs")
     parser.add_argument("--model_prefix", type=str, default=config.MODEL_PREFIX, help="Prefix for saved model files and VecNormalize stats")
-    parser.add_argument("--tb_log_name", type=str, default=config.TB_LOG_NAME, help="TensorBoard log name")
 
     # --- Environment Parameters (Defaults from config.py) ---
     parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
@@ -74,14 +72,46 @@ if __name__ == '__main__':
         print(f"{arg}: {value}")
     print("-----------------------------")
 
+    # --- 构建本次运行的专属目录 ---
+    run_name_parts = [
+        args.model_prefix,
+        f"{args.width}x{args.height}x{args.n_mines}",
+    ]
+
+    if args.seed is not None:
+        run_name_parts.append(f"seed{args.seed}")
+    
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_name_parts.append(timestamp)
+
+    run_name = "_".join(run_name_parts)
+    run_dir = os.path.join(args.experiment_base_dir, run_name)
+
+    specific_log_dir = os.path.join(run_dir, "logs")
+    specific_model_dir = os.path.join(run_dir, "models")
+    config_save_path = os.path.join(run_dir, "training_config.json")
 
     # --- Ensure directories exist ---
-    os.makedirs(args.log_dir, exist_ok=True)
-    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(specific_log_dir, exist_ok=True)
+    os.makedirs(specific_model_dir, exist_ok=True)
 
     # --- Construct paths ---
-    final_model_path = os.path.join(args.model_dir, f"{args.model_prefix}_{args.width}x{args.height}x{args.n_mines}_final.zip")
-    stats_path = os.path.join(args.model_dir, f"{args.model_prefix}_{args.width}x{args.height}x{args.n_mines}_vecnormalize.pkl")
+    final_model_path = os.path.join(specific_model_dir, "final_model.zip")
+    stats_path = os.path.join(specific_model_dir, "final_stats_vecnormalize.pkl")
+
+    # --- 保存配置 ---
+    config_to_save = {}
+    # 将 argparse 的 Namespace 对象转换为字典
+    for key, value in vars(args).items():
+        # argparse 通常存储的是可序列化的基本类型
+        config_to_save[key] = value
+    
+    try:
+        with open(config_save_path, 'w') as f:
+            json.dump(config_to_save, f, indent=4, sort_keys=True)
+        print(f"Training configuration saved to: {config_save_path}")
+    except Exception as e:
+        print(f"Error saving configuration: {e}")
 
     # --- Parse Network Architecture ---
     try:
@@ -137,8 +167,7 @@ if __name__ == '__main__':
     save_freq_per_env = max(args.checkpoint_freq // args.n_envs, 1)
     checkpoint_callback = CheckpointCallback(
         save_freq=save_freq_per_env,
-        save_path=args.model_dir,
-        name_prefix=f"{args.model_prefix}_{args.width}x{args.height}x{args.n_mines}",
+        save_path=specific_model_dir,
         save_replay_buffer=True, # Save replay buffer for off-policy algos (doesn't hurt for PPO)
         save_vecnormalize=True # Save VecNormalize statistics automatically
     )
@@ -160,7 +189,7 @@ if __name__ == '__main__':
         clip_range=args.clip_range,
         vf_coef=args.vf_coef,
         policy_kwargs=POLICY_KWARGS,
-        tensorboard_log=args.log_dir,
+        tensorboard_log=specific_log_dir,
         device=args.device,
         seed=args.seed
     )
@@ -172,7 +201,7 @@ if __name__ == '__main__':
         model.learn(
             total_timesteps=args.total_timesteps,
             callback=checkpoint_callback,
-            tb_log_name=f"{args.tb_log_name}_{args.width}x{args.height}x{args.n_mines}",
+            tb_log_name=run_name,
             reset_num_timesteps=True # Start timesteps from 0
         )
     except KeyboardInterrupt:
