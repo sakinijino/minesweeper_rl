@@ -201,7 +201,6 @@ if __name__ == '__main__':
         model.learn(
             total_timesteps=args.total_timesteps,
             callback=checkpoint_callback,
-            tb_log_name=run_name,
             reset_num_timesteps=True # Start timesteps from 0
         )
     except KeyboardInterrupt:

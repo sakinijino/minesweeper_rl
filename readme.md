@@ -70,7 +70,7 @@ python train.py
 Make sure you are in the project directory
 ```bash
 python train.py \
-  --total_timesteps 1000000 \
+  --total_timesteps 1_000_000 \
   --n_envs 4 \
   --n_steps 1024 \
   --batch_size 128 \
