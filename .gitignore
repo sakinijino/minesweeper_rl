@@ -12,6 +12,7 @@ venv/
 models/
 logs/
 training_runs/
+training_runs
 *.zip
 *.pkl
 *.h5
