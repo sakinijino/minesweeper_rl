@@ -74,16 +74,16 @@ python train.py \
   --n_envs 4 \
   --n_steps 1024 \
   --batch_size 128 \
-  --n_epochs 10 \
+  --n_epochs 8 \
   --learning_rate 0.0001 \
   --ent_coef 0.01 \
   --gamma 0.99 \
-  --gae_lambda 0.90 \
+  --gae_lambda 0.95 \
   --clip_range 0.2 \
-  --vf_coef 1.0 \
+  --vf_coef 0.5 \
   --features_dim 128 \
   --pi_layers "64,64" \
-  --vf_layers "256,256" \
+  --vf_layers "64,64" \
   --checkpoint_freq 50000 \
   --experiment_base_dir "./training_runs" \
   --model_prefix "ppo_run" \
@@ -94,7 +94,6 @@ python train.py \
   --reward_lose -0.05 \
   --reward_reveal 0.1 \
   --reward_invalid -0.1 \
-  --max_reward_per_step 0.2 \
   --seed 42 \
   --device "cuda" \
   --vec_env_type "subproc"
