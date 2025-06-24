@@ -1,6 +1,8 @@
 # train.py
 import os, datetime, json
 import argparse
+import re
+import glob
 import gymnasium as gym
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.env_util import make_vec_env
@@ -21,6 +23,77 @@ def parse_int_list(string_list):
         return [int(x.strip()) for x in string_list.split(',') if x.strip()]
     except ValueError as e:
         raise argparse.ArgumentTypeError(f"Invalid integer list format: {string_list}. Error: {e}")
+
+def find_checkpoint_files(checkpoint_dir):
+    """Find all checkpoint files in the given directory."""
+    # Pattern for checkpoint files: rl_model_<steps>_steps.zip
+    pattern = os.path.join(checkpoint_dir, "rl_model_*_steps.zip")
+    checkpoint_files = glob.glob(pattern)
+    
+    # Also check for final model
+    final_model_path = os.path.join(checkpoint_dir, "final_model.zip")
+    if os.path.exists(final_model_path):
+        checkpoint_files.append(final_model_path)
+    
+    return checkpoint_files
+
+def extract_steps_from_checkpoint(checkpoint_path):
+    """Extract the number of steps from checkpoint filename."""
+    filename = os.path.basename(checkpoint_path)
+    
+    # Handle final_model.zip - need to read from metadata or assume it's the final step
+    if filename == "final_model.zip":
+        return float('inf')  # Treat as highest step count
+    
+    # Extract steps from rl_model_<steps>_steps.zip pattern
+    match = re.search(r'rl_model_(\d+)_steps\.zip', filename)
+    if match:
+        return int(match.group(1))
+    
+    return 0
+
+def find_best_checkpoint(checkpoint_dir, target_steps=None):
+    """Find the best checkpoint to continue training from."""
+    checkpoint_files = find_checkpoint_files(checkpoint_dir)
+    
+    if not checkpoint_files:
+        raise FileNotFoundError(f"No checkpoint files found in {checkpoint_dir}")
+    
+    # Sort by steps
+    checkpoint_files.sort(key=extract_steps_from_checkpoint)
+    
+    if target_steps is None:
+        # Return the latest checkpoint
+        return checkpoint_files[-1]
+    else:
+        # Find the checkpoint closest to but not exceeding target_steps
+        best_checkpoint = None
+        for checkpoint in checkpoint_files:
+            steps = extract_steps_from_checkpoint(checkpoint)
+            if steps == float('inf'):  # Skip final model unless it's the only option
+                continue
+            if steps <= target_steps:
+                best_checkpoint = checkpoint
+            else:
+                break
+        
+        if best_checkpoint is None and checkpoint_files:
+            # If no checkpoint found within target_steps, use the earliest one
+            best_checkpoint = checkpoint_files[0]
+        
+        return best_checkpoint
+
+def load_training_config(config_path):
+    """Load training configuration from JSON file."""
+    if not os.path.exists(config_path):
+        return None
+    
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Warning: Could not load training config from {config_path}: {e}")
+        return None
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train MaskablePPO agent for Minesweeper.")
@@ -60,6 +133,10 @@ if __name__ == '__main__':
     parser.add_argument("--reward_invalid", type=float, default=config.REWARD_INVALID, help="Penalty for clicking revealed cells")
     parser.add_argument("--max_reward_per_step", type=float, default=config.MAX_REWARD_PER_STEP, help="Maximum reward in one step")
 
+    # --- Continue Training ---
+    parser.add_argument("--continue_from", type=str, default=None, help="Directory path containing checkpoints to continue training from")
+    parser.add_argument("--continue_steps", type=int, default=None, help="Specific step checkpoint to continue from (optional, uses latest if not specified)")
+
     # --- Other Settings ---
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], help="Device to use for training (auto, cpu, cuda)")
@@ -67,25 +144,75 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    # --- Continue Training Logic ---
+    continue_training = False
+    checkpoint_path = None
+    loaded_config = None
+    original_run_dir = None
+    
+    if args.continue_from:
+        continue_training = True
+        checkpoint_dir = args.continue_from
+        
+        # Check if continue_from is a run directory (contains models/ subdirectory)
+        models_dir = os.path.join(checkpoint_dir, "models")
+        if os.path.exists(models_dir):
+            original_run_dir = checkpoint_dir
+            checkpoint_dir = models_dir
+        
+        # Find the best checkpoint to continue from
+        try:
+            checkpoint_path = find_best_checkpoint(checkpoint_dir, args.continue_steps)
+            print(f"Found checkpoint to continue from: {checkpoint_path}")
+            
+            # Try to load the original training configuration
+            if original_run_dir:
+                config_path = os.path.join(original_run_dir, "training_config.json")
+                loaded_config = load_training_config(config_path)
+                if loaded_config:
+                    print(f"Loaded original training configuration from: {config_path}")
+                    # Update args with loaded config, but allow command line args to override
+                    for key, value in loaded_config.items():
+                        if key in vars(args) and getattr(args, key) == parser.get_default(key):
+                            # Only update if current value is the default (not explicitly set)
+                            setattr(args, key, value)
+                    print("Updated training configuration with loaded values (command line args take precedence)")
+                
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            exit(1)
+
     print("--- Training Configuration ---")
     for arg, value in vars(args).items():
         print(f"{arg}: {value}")
     print("-----------------------------")
 
     # --- 构建本次运行的专属目录 ---
-    run_name_parts = [
-        args.model_prefix,
-        f"{args.width}x{args.height}x{args.n_mines}",
-    ]
+    if continue_training and original_run_dir:
+        # For continue training, create a new timestamped directory based on original
+        # Use normpath to handle trailing slashes correctly
+        original_run_name = os.path.basename(os.path.normpath(original_run_dir))
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        run_name = f"{original_run_name}_continue_{timestamp}"
+        run_dir = os.path.join(args.experiment_base_dir, run_name)
+        print(f"Continuing training in new directory: {run_dir}")
+        print(f"Original run directory: {original_run_dir}")
+        print(f"Extracted original run name: {original_run_name}")
+    else:
+        # Normal training - create new directory
+        run_name_parts = [
+            args.model_prefix,
+            f"{args.width}x{args.height}x{args.n_mines}",
+        ]
 
-    if args.seed is not None:
-        run_name_parts.append(f"seed{args.seed}")
-    
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name_parts.append(timestamp)
+        if args.seed is not None:
+            run_name_parts.append(f"seed{args.seed}")
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        run_name_parts.append(timestamp)
 
-    run_name = "_".join(run_name_parts)
-    run_dir = os.path.join(args.experiment_base_dir, run_name)
+        run_name = "_".join(run_name_parts)
+        run_dir = os.path.join(args.experiment_base_dir, run_name)
 
     specific_log_dir = os.path.join(run_dir, "logs")
     specific_model_dir = os.path.join(run_dir, "models")
@@ -174,34 +301,77 @@ if __name__ == '__main__':
     print(f"Checkpoints will be saved every {save_freq_per_env * args.n_envs} total steps.")
 
 
-    # --- Create MaskablePPO Model ---
-    model = MaskablePPO(
-        "CnnPolicy",
-        train_env,
-        verbose=1,
-        n_steps=args.n_steps,
-        batch_size=args.batch_size,
-        n_epochs=args.n_epochs,
-        learning_rate=args.learning_rate,
-        ent_coef=args.ent_coef,
-        gamma=args.gamma,
-        gae_lambda=args.gae_lambda,
-        clip_range=args.clip_range,
-        vf_coef=args.vf_coef,
-        policy_kwargs=POLICY_KWARGS,
-        tensorboard_log=specific_log_dir,
-        device=args.device,
-        seed=args.seed
-    )
-    print(f"Model created on device: {model.device}")
+    # --- Create or Load MaskablePPO Model ---
+    if continue_training and checkpoint_path:
+        # Load model from checkpoint
+        print(f"Loading model from checkpoint: {checkpoint_path}")
+        model = MaskablePPO.load(
+            checkpoint_path,
+            env=train_env,
+            device=args.device,
+            # Note: some hyperparameters might be overridden by the saved model
+        )
+        # Set tensorboard logging for continue training
+        model.tensorboard_log = specific_log_dir
+        print(f"Model loaded from checkpoint on device: {model.device}")
+        print(f"TensorBoard logging set to: {specific_log_dir}")
+        
+        # Load VecNormalize stats if available
+        checkpoint_dir = os.path.dirname(checkpoint_path)
+        vecnormalize_path = None
+        
+        # Try to find the corresponding VecNormalize file
+        checkpoint_name = os.path.basename(checkpoint_path)
+        if checkpoint_name == "final_model.zip":
+            vecnormalize_path = os.path.join(checkpoint_dir, "final_stats_vecnormalize.pkl")
+        else:
+            # For checkpoint files like rl_model_50000_steps.zip, look for vecnormalize_50000_steps.pkl
+            match = re.search(r'rl_model_(\d+)_steps\.zip', checkpoint_name)
+            if match:
+                steps = match.group(1)
+                vecnormalize_path = os.path.join(checkpoint_dir, f"vecnormalize_{steps}_steps.pkl")
+        
+        if vecnormalize_path and os.path.exists(vecnormalize_path):
+            print(f"Loading VecNormalize stats from: {vecnormalize_path}")
+            train_env = VecNormalize.load(vecnormalize_path, train_env)
+        else:
+            print("Warning: Could not find corresponding VecNormalize stats file")
+            
+    else:
+        # Create new model
+        model = MaskablePPO(
+            "CnnPolicy",
+            train_env,
+            verbose=1,
+            n_steps=args.n_steps,
+            batch_size=args.batch_size,
+            n_epochs=args.n_epochs,
+            learning_rate=args.learning_rate,
+            ent_coef=args.ent_coef,
+            gamma=args.gamma,
+            gae_lambda=args.gae_lambda,
+            clip_range=args.clip_range,
+            vf_coef=args.vf_coef,
+            policy_kwargs=POLICY_KWARGS,
+            tensorboard_log=specific_log_dir,
+            device=args.device,
+            seed=args.seed
+        )
+        print(f"New model created on device: {model.device}")
 
     # --- Training ---
-    print("Starting training...")
+    if continue_training:
+        print("Continuing training from checkpoint...")
+        reset_timesteps = False  # Don't reset timesteps when continuing
+    else:
+        print("Starting training from scratch...")
+        reset_timesteps = True   # Reset timesteps for new training
+        
     try:
         model.learn(
             total_timesteps=args.total_timesteps,
             callback=checkpoint_callback,
-            reset_num_timesteps=True # Start timesteps from 0
+            reset_num_timesteps=reset_timesteps
         )
     except KeyboardInterrupt:
         print("Training interrupted by user.")

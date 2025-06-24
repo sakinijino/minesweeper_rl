@@ -65,6 +65,18 @@ The `train.py` script trains the MaskablePPO agent.
 python train.py
 ```
 
+**Continue Training from Checkpoint:**
+```bash
+# Continue from the latest checkpoint in a training run directory
+python train.py --continue_from ./training_runs/ppo_run_5x5x3_20241215-143000/
+
+# Continue from a specific step checkpoint
+python train.py --continue_from ./training_runs/ppo_run_5x5x3_20241215-143000/ --continue_steps 100000
+
+# Continue training with different hyperparameters (will override original config)
+python train.py --continue_from ./training_runs/ppo_run_5x5x3_20241215-143000/ --learning_rate 0.0005 --total_timesteps 2000000
+```
+
 **Advanced Training:**
 
 Make sure you are in the project directory
@@ -113,6 +125,8 @@ python train.py \
 # --pi_layers: Policy head layers, comma-separated (Default: "64,64")
 # --vf_layers: Value head layers, comma-separated (Default: "256,256")
 # --checkpoint_freq: Total steps between checkpoints (Default: 50000)
+# --continue_from: Directory path containing checkpoints to continue training from (Default: None)
+# --continue_steps: Specific step checkpoint to continue from - uses latest if not specified (Default: None)
 # --experiment_base_dir: Base directory for all training run outputs (Default from config.py)
 # --model_prefix: Prefix for saved files (Default from config.py) - IMPORTANT for identifying runs
 # --width: Environment grid width (Default from config.py)
