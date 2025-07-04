@@ -2,7 +2,6 @@
 import os, datetime, json
 import argparse
 import re
-import glob
 import gymnasium as gym
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.env_util import make_vec_env
@@ -14,6 +13,8 @@ from minesweeper_env import MinesweeperEnv
 from custom_cnn import CustomCNN
 # 导入 config 来获取默认路径和环境参数
 import config
+# 导入 checkpoint 相关工具函数
+from checkpoint_utils import find_best_checkpoint, load_training_config
 
 def parse_int_list(string_list):
     """Helper function to parse comma-separated integers."""
@@ -24,76 +25,6 @@ def parse_int_list(string_list):
     except ValueError as e:
         raise argparse.ArgumentTypeError(f"Invalid integer list format: {string_list}. Error: {e}")
 
-def find_checkpoint_files(checkpoint_dir):
-    """Find all checkpoint files in the given directory."""
-    # Pattern for checkpoint files: rl_model_<steps>_steps.zip
-    pattern = os.path.join(checkpoint_dir, "rl_model_*_steps.zip")
-    checkpoint_files = glob.glob(pattern)
-    
-    # Also check for final model
-    final_model_path = os.path.join(checkpoint_dir, "final_model.zip")
-    if os.path.exists(final_model_path):
-        checkpoint_files.append(final_model_path)
-    
-    return checkpoint_files
-
-def extract_steps_from_checkpoint(checkpoint_path):
-    """Extract the number of steps from checkpoint filename."""
-    filename = os.path.basename(checkpoint_path)
-    
-    # Handle final_model.zip - need to read from metadata or assume it's the final step
-    if filename == "final_model.zip":
-        return float('inf')  # Treat as highest step count
-    
-    # Extract steps from rl_model_<steps>_steps.zip pattern
-    match = re.search(r'rl_model_(\d+)_steps\.zip', filename)
-    if match:
-        return int(match.group(1))
-    
-    return 0
-
-def find_best_checkpoint(checkpoint_dir, target_steps=None):
-    """Find the best checkpoint to continue training from."""
-    checkpoint_files = find_checkpoint_files(checkpoint_dir)
-    
-    if not checkpoint_files:
-        raise FileNotFoundError(f"No checkpoint files found in {checkpoint_dir}")
-    
-    # Sort by steps
-    checkpoint_files.sort(key=extract_steps_from_checkpoint)
-    
-    if target_steps is None:
-        # Return the latest checkpoint
-        return checkpoint_files[-1]
-    else:
-        # Find the checkpoint closest to but not exceeding target_steps
-        best_checkpoint = None
-        for checkpoint in checkpoint_files:
-            steps = extract_steps_from_checkpoint(checkpoint)
-            if steps == float('inf'):  # Skip final model unless it's the only option
-                continue
-            if steps <= target_steps:
-                best_checkpoint = checkpoint
-            else:
-                break
-        
-        if best_checkpoint is None and checkpoint_files:
-            # If no checkpoint found within target_steps, use the earliest one
-            best_checkpoint = checkpoint_files[0]
-        
-        return best_checkpoint
-
-def load_training_config(config_path):
-    """Load training configuration from JSON file."""
-    if not os.path.exists(config_path):
-        return None
-    
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Warning: Could not load training config from {config_path}: {e}")
-        return None
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train MaskablePPO agent for Minesweeper.")
