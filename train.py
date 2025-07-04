@@ -18,6 +18,9 @@ from checkpoint_utils import find_best_checkpoint, load_training_config, find_ve
 # 导入模型工厂
 from model_factory import create_model
 
+
+# ===== 辅助函数 =====
+
 def parse_int_list(string_list):
     """Helper function to parse comma-separated integers."""
     if not string_list: # Handle empty string case
@@ -28,7 +31,13 @@ def parse_int_list(string_list):
         raise argparse.ArgumentTypeError(f"Invalid integer list format: {string_list}. Error: {e}")
 
 
-if __name__ == '__main__':
+def setup_argument_parser():
+    """
+    设置并返回配置好的参数解析器。
+    
+    Returns:
+        ArgumentParser: 配置好的参数解析器
+    """
     parser = argparse.ArgumentParser(description="Train MaskablePPO agent for Minesweeper.")
 
     # --- PPO Hyperparameters ---
@@ -44,7 +53,7 @@ if __name__ == '__main__':
     parser.add_argument("--clip_range", type=float, default=0.2, help="Clipping parameter for PPO")
     parser.add_argument("--vf_coef", type=float, default=1.0, help="Value function coefficient in the loss calculation")
 
-    # --- Policy Network Architecture (方案 A) ---
+    # --- Policy Network Architecture ---
     parser.add_argument("--features_dim", type=int, default=128, help="Output dimension of the CNN features extractor")
     parser.add_argument("--pi_layers", type=str, default="64,64",
                         help="Comma-separated layer sizes for the policy network head (e.g., '128,64')")
@@ -52,11 +61,11 @@ if __name__ == '__main__':
                         help="Comma-separated layer sizes for the value network head (e.g., '512,256')")
     parser.add_argument("--checkpoint_freq", type=int, default=50000, help="Total steps between checkpoints")
 
-    # --- Paths and Naming (Defaults from config.py) ---
+    # --- Paths and Naming ---
     parser.add_argument("--experiment_base_dir", type=str, default=config.EXPERIMENT_BASE_DIR, help="Base directory for all training run outputs")
     parser.add_argument("--model_prefix", type=str, default=config.MODEL_PREFIX, help="Prefix for saved model files and VecNormalize stats")
 
-    # --- Environment Parameters (Defaults from config.py) ---
+    # --- Environment Parameters ---
     parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
     parser.add_argument("--height", type=int, default=config.HEIGHT, help="Height of the Minesweeper grid")
     parser.add_argument("--n_mines", type=int, default=config.N_MINES, help="Number of mines in the grid")
@@ -75,9 +84,20 @@ if __name__ == '__main__':
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], help="Device to use for training (auto, cpu, cuda)")
     parser.add_argument("--vec_env_type", type=str, default="subproc", choices=["subproc", "dummy"], help="Type of VecEnv (subproc for parallel, dummy for sequential/debug)")
 
-    args = parser.parse_args()
+    return parser
 
-    # --- Continue Training Logic ---
+
+def handle_continue_training_logic(args, parser):
+    """
+    处理继续训练的逻辑，包括查找检查点和加载配置。
+    
+    Args:
+        args: 解析后的命令行参数
+        parser: 参数解析器实例
+        
+    Returns:
+        Tuple[bool, str, dict, str]: (是否继续训练, 检查点路径, 加载的配置, 原始运行目录)
+    """
     continue_training = False
     checkpoint_path = None
     loaded_config = None
@@ -114,16 +134,24 @@ if __name__ == '__main__':
         except FileNotFoundError as e:
             print(f"Error: {e}")
             exit(1)
+    
+    return continue_training, checkpoint_path, loaded_config, original_run_dir
 
-    print("--- Training Configuration ---")
-    for arg, value in vars(args).items():
-        print(f"{arg}: {value}")
-    print("-----------------------------")
 
-    # --- 构建本次运行的专属目录 ---
+def create_training_directories(args, continue_training, original_run_dir):
+    """
+    创建训练相关的目录结构。
+    
+    Args:
+        args: 命令行参数
+        continue_training: 是否为继续训练
+        original_run_dir: 原始运行目录（如果是继续训练）
+        
+    Returns:
+        Tuple[str, str, str, str, str, str]: (运行目录, 日志目录, 模型目录, 配置路径, 最终模型路径, 统计文件路径)
+    """
     if continue_training and original_run_dir:
         # For continue training, create a new timestamped directory based on original
-        # Use normpath to handle trailing slashes correctly
         original_run_name = os.path.basename(os.path.normpath(original_run_dir))
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         run_name = f"{original_run_name}_continue_{timestamp}"
@@ -147,23 +175,33 @@ if __name__ == '__main__':
         run_name = "_".join(run_name_parts)
         run_dir = os.path.join(args.experiment_base_dir, run_name)
 
+    # Create subdirectories
     specific_log_dir = os.path.join(run_dir, "logs")
     specific_model_dir = os.path.join(run_dir, "models")
     config_save_path = os.path.join(run_dir, "training_config.json")
-
-    # --- Ensure directories exist ---
+    
+    # Ensure directories exist
     os.makedirs(specific_log_dir, exist_ok=True)
     os.makedirs(specific_model_dir, exist_ok=True)
-
-    # --- Construct paths ---
+    
+    # Construct output file paths
     final_model_path = os.path.join(specific_model_dir, "final_model.zip")
     stats_path = os.path.join(specific_model_dir, "final_stats_vecnormalize.pkl")
+    
+    return run_dir, specific_log_dir, specific_model_dir, config_save_path, final_model_path, stats_path
 
-    # --- 保存配置 ---
+
+def save_training_config(args, config_save_path):
+    """
+    保存训练配置到JSON文件。
+    
+    Args:
+        args: 命令行参数
+        config_save_path: 配置文件保存路径
+    """
     config_to_save = {}
     # 将 argparse 的 Namespace 对象转换为字典
     for key, value in vars(args).items():
-        # argparse 通常存储的是可序列化的基本类型
         config_to_save[key] = value
     
     try:
@@ -173,17 +211,38 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Error saving configuration: {e}")
 
-    # --- Parse Network Architecture ---
+
+def parse_network_architecture(args):
+    """
+    解析网络架构参数。
+    
+    Args:
+        args: 命令行参数
+        
+    Returns:
+        Tuple[List[int], List[int]]: (策略网络层大小, 价值网络层大小)
+    """
     try:
         pi_layer_sizes = parse_int_list(args.pi_layers)
         vf_layer_sizes = parse_int_list(args.vf_layers)
         print(f"Parsed policy layers: {pi_layer_sizes}")
         print(f"Parsed value layers: {vf_layer_sizes}")
+        return pi_layer_sizes, vf_layer_sizes
     except argparse.ArgumentTypeError as e:
         print(f"Error parsing network layers: {e}")
         exit(1)
 
-    # --- Create Environment Function ---
+
+def create_training_environment(args):
+    """
+    创建训练环境。
+    
+    Args:
+        args: 命令行参数
+        
+    Returns:
+        VecNormalize: 配置好的向量化环境
+    """
     def create_env():
         """Creates an instance of the Minesweeper environment."""
         env = MinesweeperEnv(
@@ -199,7 +258,7 @@ if __name__ == '__main__':
         )
         return env
 
-    # --- Create Vectorized Environment ---
+    # Create Vectorized Environment
     vec_env_cls = SubprocVecEnv if args.vec_env_type == "subproc" and args.n_envs > 1 else DummyVecEnv
     print(f"Using VecEnv type: {vec_env_cls.__name__}")
 
@@ -211,10 +270,21 @@ if __name__ == '__main__':
     )
     # Normalize rewards, but not observations (as observations are already normalized in env)
     train_env = VecNormalize(train_env, norm_obs=False, norm_reward=True, clip_obs=10., gamma=args.gamma)
-    print(f"Environment VecNormalize stats will be saved to: {stats_path}")
+    
+    return train_env
 
 
-    # --- Checkpoint Callback ---
+def setup_checkpoint_callback(args, specific_model_dir):
+    """
+    设置检查点回调。
+    
+    Args:
+        args: 命令行参数
+        specific_model_dir: 模型保存目录
+        
+    Returns:
+        CheckpointCallback: 配置好的检查点回调
+    """
     # Save a checkpoint every N steps, where N is roughly checkpoint_freq total steps
     save_freq_per_env = max(args.checkpoint_freq // args.n_envs, 1)
     checkpoint_callback = CheckpointCallback(
@@ -224,9 +294,25 @@ if __name__ == '__main__':
         save_vecnormalize=True # Save VecNormalize statistics automatically
     )
     print(f"Checkpoints will be saved every {save_freq_per_env * args.n_envs} total steps.")
+    return checkpoint_callback
 
 
-    # --- Create or Load MaskablePPO Model ---
+def create_training_model(args, train_env, continue_training, checkpoint_path, specific_log_dir, pi_layer_sizes, vf_layer_sizes):
+    """
+    创建或加载训练模型。
+    
+    Args:
+        args: 命令行参数
+        train_env: 训练环境
+        continue_training: 是否继续训练
+        checkpoint_path: 检查点路径
+        specific_log_dir: 日志目录
+        pi_layer_sizes: 策略网络层大小
+        vf_layer_sizes: 价值网络层大小
+        
+    Returns:
+        Tuple[MaskablePPO, Any]: (模型, 更新后的环境)
+    """
     # Prepare model configuration
     model_config = {
         'n_steps': args.n_steps,
@@ -271,11 +357,25 @@ if __name__ == '__main__':
         print(f"Model created/loaded successfully on device: {model.device}")
         if continue_training:
             print(f"TensorBoard logging set to: {specific_log_dir}")
+        return model, train_env
     except Exception as e:
         print(f"Error creating model: {e}")
         exit(1)
 
-    # --- Training ---
+
+def run_training_loop(model, args, checkpoint_callback, continue_training, final_model_path, stats_path, train_env):
+    """
+    执行训练循环。
+    
+    Args:
+        model: 训练模型
+        args: 命令行参数
+        checkpoint_callback: 检查点回调
+        continue_training: 是否继续训练
+        final_model_path: 最终模型保存路径
+        stats_path: 统计文件保存路径
+        train_env: 训练环境
+    """
     if continue_training:
         print("Continuing training from checkpoint...")
         reset_timesteps = False  # Don't reset timesteps when continuing
@@ -292,15 +392,70 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("Training interrupted by user.")
     finally:
-        # --- Save Final Model and Environment Stats ---
+        # Save Final Model and Environment Stats
         model.save(final_model_path)
         print(f"Training finished or interrupted. Final model saved to: {final_model_path}")
 
-        # VecNormalize stats are saved by the callback, but save again explicitly is fine
+        # VecNormalize stats are saved by the callback, but save again explicitly
         # to ensure the latest stats associated with the final model are saved.
         train_env.save(stats_path)
         print(f"Final environment VecNormalize stats saved to: {stats_path}")
 
-        # --- Close Environment ---
+        # Close Environment
         train_env.close()
         print("Environment closed.")
+
+
+def print_training_configuration(args):
+    """打印训练配置信息"""
+    print("--- Training Configuration ---")
+    for arg, value in vars(args).items():
+        print(f"{arg}: {value}")
+    print("-----------------------------")
+
+
+def main():
+    """主训练函数"""
+    # 1. 设置参数解析
+    parser = setup_argument_parser()
+    args = parser.parse_args()
+    
+    # 2. 处理继续训练逻辑
+    continue_training, checkpoint_path, loaded_config, original_run_dir = handle_continue_training_logic(args, parser)
+    
+    # 3. 打印配置信息
+    print_training_configuration(args)
+    
+    # 4. 创建训练目录
+    run_dir, specific_log_dir, specific_model_dir, config_save_path, final_model_path, stats_path = create_training_directories(
+        args, continue_training, original_run_dir
+    )
+    
+    # 5. 保存训练配置
+    save_training_config(args, config_save_path)
+    
+    # 6. 解析网络架构
+    pi_layer_sizes, vf_layer_sizes = parse_network_architecture(args)
+    
+    # 7. 创建训练环境
+    train_env = create_training_environment(args)
+    print(f"Environment VecNormalize stats will be saved to: {stats_path}")
+    
+    # 8. 设置检查点回调
+    checkpoint_callback = setup_checkpoint_callback(args, specific_model_dir)
+    
+    # 9. 创建训练模型
+    model, train_env = create_training_model(
+        args, train_env, continue_training, checkpoint_path, 
+        specific_log_dir, pi_layer_sizes, vf_layer_sizes
+    )
+    
+    # 10. 执行训练循环
+    run_training_loop(
+        model, args, checkpoint_callback, continue_training, 
+        final_model_path, stats_path, train_env
+    )
+
+
+if __name__ == '__main__':
+    main()
