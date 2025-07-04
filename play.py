@@ -4,7 +4,7 @@ import gymnasium as gym
 import pygame
 import time
 import argparse
-import numpy as np # Import numpy for stats
+import numpy as np
 
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
@@ -19,44 +19,69 @@ from checkpoint_utils import find_best_checkpoint, load_training_config, find_ve
 # 导入模型工厂
 from model_factory import create_inference_model
 
-def run_batch_mode(args):
-    """
-    Runs the agent in batch mode without rendering for a specified number of episodes.
-    Uses configuration from the 'args' object.
-    """
-    print(f"--- Running Batch Mode ({args.num_episodes} episodes) ---")
 
-    # --- Environment Creation (No Rendering) ---
+# ===== 共享辅助函数 =====
+
+def create_environment(args, render_mode=None):
+    """
+    创建 Minesweeper 环境实例。
+    
+    Args:
+        args: 命令行参数
+        render_mode: 渲染模式 ('human', None, 'rgb_array')
+        
+    Returns:
+        配置好的环境实例
+    """
     def create_env_instance():
-        # Set render_mode to None or 'rgb_array' to disable pygame window
         return MinesweeperEnv(
-            width=args.width,       # Use arg value
-            height=args.height,     # Use arg value
-            n_mines=args.n_mines,    # Use arg value
+            width=args.width,
+            height=args.height,
+            n_mines=args.n_mines,
             reward_win=args.reward_win,
             reward_lose=args.reward_lose,
             reward_reveal=args.reward_reveal,
             reward_invalid=args.reward_invalid,
             max_reward_per_step=args.max_reward_per_step,
-            render_mode=None,        # No rendering needed for batch mode
+            render_mode=render_mode
         )
+    
+    # 为交互模式返回原始环境实例和包装后的环境
+    if render_mode == 'human':
+        env_instance = create_env_instance()
+        env = DummyVecEnv([lambda: env_instance])
+        return env, env_instance
+    else:
+        # 批量模式只需要包装后的环境
+        env = DummyVecEnv([lambda: create_env_instance()])
+        return env, None
 
-    # Use DummyVecEnv for batch mode as well (simpler for single env evaluation)
-    env = DummyVecEnv([lambda: create_env_instance()])
 
+def setup_random_seed(args, env):
+    """设置随机种子"""
     if args.seed is not None:
         set_random_seed(args.seed)
         env.seed(args.seed)
         print(f"Using random seed: {args.seed}")
 
-    # --- Model and Environment Loading ---
-    model_path = args.model_path # Use arg value
-    stats_path = args.stats_path # Use arg value
+
+def load_model_and_environment(args, env):
+    """
+    加载模型和环境统计数据。
+    
+    Args:
+        args: 命令行参数
+        env: 环境实例
+        
+    Returns:
+        Tuple[model, updated_env] 或 (None, env) 如果不需要模型
+    """
+    model_path = args.model_path
+    stats_path = args.stats_path
     
     if not model_path or not os.path.exists(model_path):
         print(f"Error: Model path not found: {model_path}")
-        env.close()
-        return
+        return None, env
 
     print(f"Loading model: {model_path}")
     
@@ -69,22 +94,58 @@ def run_batch_mode(args):
         )
         print(f"Model loaded on device: {model.device}")
         
-        # Set VecNormalize to evaluation mode if it was loaded
+        # 设置 VecNormalize 为评估模式
         if hasattr(env, 'training'):
             env.training = False
             env.norm_reward = False
             print("VecNormalize set to evaluation mode")
+            
+        return model, env
         
     except Exception as e:
         print(f"Error loading model: {e}")
+        return None, env
+
+
+def print_final_statistics(total_games, wins, player_type):
+    """打印最终统计信息"""
+    win_rate = (wins / total_games * 100) if total_games > 0 else 0
+    print(f"\n--- Final {player_type} Mode Statistics ---")
+    print(f"Total Games Played: {total_games}")
+    print(f"{player_type} Wins: {wins}")
+    print(f"{player_type} Win Rate: {win_rate:.2f}%")
+
+
+def print_episode_result(episode, total_episodes, episode_steps, episode_reward, won_episode):
+    """打印单局游戏结果"""
+    status = "Win" if won_episode else "Lose"
+    print(f"Episode {episode + 1}/{total_episodes} finished - "
+          f"Steps: {episode_steps}, Reward: {episode_reward:.2f}, Result: {status}")
+
+
+# ===== 游戏模式函数 =====
+
+def run_batch_mode(args):
+    """
+    批量模式：智能体在无界面环境中进行多局游戏测试。
+    """
+    print(f"--- Running Batch Mode ({args.num_episodes} episodes) ---")
+
+    # 创建环境（无渲染）
+    env, _ = create_environment(args, render_mode=None)
+    setup_random_seed(args, env)
+    
+    # 加载模型
+    model, env = load_model_and_environment(args, env)
+    if model is None:
         env.close()
         return
 
-    # --- Batch Game Loop ---
+    # 批量游戏循环
     total_games = 0
     wins = 0
 
-    for episode in range(args.num_episodes): # Use arg value
+    for episode in range(args.num_episodes):
         obs = env.reset()
         terminated = False
         truncated = False
@@ -93,117 +154,56 @@ def run_batch_mode(args):
         won_episode = False
 
         while not terminated and not truncated:
-            # Get action mask
+            # 获取动作掩码并预测动作
             action_masks = env.env_method("action_masks")[0]
+            action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
 
-            # Predict action
-            action, _states = model.predict(obs,
-                                            action_masks=action_masks,
-                                            deterministic=True)
-
-            # Step environment
+            # 执行动作
             obs, reward, terminated_arr, info_arr = env.step(action)
             terminated = terminated_arr[0]
-            actual_info = info_arr[0] # Access the info dict from the underlying env
-            won_episode = actual_info.get('is_success', False) # Check if 'is_success' exists in info
+            actual_info = info_arr[0]
+            won_episode = actual_info.get('is_success', False)
             truncated = actual_info.get('TimeLimit.truncated', False)
-            reward = reward[0] # Get reward from the single env
-            # obs is already updated
+            reward = reward[0]
 
             episode_reward += reward
             episode_steps += 1
 
-            # No rendering or delay in batch mode
-
-        # End of episode
+        # 统计结果
         total_games += 1
         if won_episode:
             wins += 1
 
-        print(f"Episode {episode + 1}/{args.num_episodes} finished - Steps: {episode_steps}, Reward: {episode_reward:.2f}, Win: {won_episode}") # Use arg value
+        print_episode_result(episode, args.num_episodes, episode_steps, episode_reward, won_episode)
 
-    # --- Statistics ---
-    win_rate = (wins / total_games * 100) if total_games > 0 else 0
-    print("\n--- Batch Mode Statistics ---")
-    print(f"Total Games Played: {total_games}")
-    print(f"Model Wins: {wins}")
-    print(f"Model Win Rate: {win_rate:.2f}%")
-
+    # 打印最终统计
+    print_final_statistics(total_games, wins, "Agent")
     env.close()
 
 
-def run_interactive_mode(args):
+def run_human_mode(args):
     """
-    Runs the game in interactive mode (human or agent) with rendering and statistics.
-    Uses configuration from the 'args' object.
+    人类模式：人类玩家通过鼠标点击进行游戏。
     """
-    print("--- Running Interactive Mode ---")
-    player_type = "Human" if args.human else "Agent"
-    print(f"Player: {player_type}")
+    print("--- Running Human Mode ---")
 
-     # Statistics tracking
+    # 创建环境（有渲染）
+    env, env_instance = create_environment(args, render_mode='human')
+    setup_random_seed(args, env)
+    
+    # 人类模式不需要加载模型，但需要处理 VecNormalize
+    stats_path = args.stats_path
+    if stats_path and os.path.exists(stats_path):
+        print(f"Loading VecNormalize stats from: {stats_path}")
+        env = VecNormalize.load(stats_path, env)
+        env.training = False
+        env.norm_reward = False
+        print("VecNormalize stats loaded.")
+
+    # 游戏统计
     total_games = 0
     player_wins = 0
 
-    # --- Environment Creation (with Rendering) ---
-    def create_env_instance():
-        # Create with 'human' render mode for interactive play
-        return MinesweeperEnv(
-            width=args.width,      # Use arg value
-            height=args.height,    # Use arg value
-            n_mines=args.n_mines,   # Use arg value
-            reward_win=args.reward_win,
-            reward_lose=args.reward_lose,
-            reward_reveal=args.reward_reveal,
-            reward_invalid=args.reward_invalid,
-            max_reward_per_step=args.max_reward_per_step,
-            render_mode='human'
-        )
-
-    # Need the raw instance for direct access (e.g., cell_size, mouse clicks)
-    env_instance = create_env_instance()
-    # Wrap in DummyVecEnv for SB3 compatibility
-    env = DummyVecEnv([lambda: env_instance])
-
-    if args.seed is not None:
-        set_random_seed(args.seed)
-        env.seed(args.seed)
-        print(f"Using random seed: {args.seed}")
-
-    # --- Model Loading (only if agent is playing) ---
-    model = None
-    if not args.human: # If agent is playing
-        model_path = args.model_path # Use arg value
-        stats_path = args.stats_path # Use arg value
-        
-        if not model_path or not os.path.exists(model_path):
-            print(f"Error: Model path not found: {model_path}")
-            env.close()
-            return
-
-        print(f"Loading model: {model_path}")
-        
-        try:
-            model, env = create_inference_model(
-                env=env,
-                checkpoint_path=model_path,
-                vecnormalize_stats_path=stats_path,
-                device=args.device
-            )
-            print(f"Model loaded on device: {model.device}")
-            
-            # Set VecNormalize to evaluation mode if it was loaded
-            if hasattr(env, 'training'):
-                env.training = False
-                env.norm_reward = False
-                print("VecNormalize set to evaluation mode")
-                
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            env.close()
-            return
-
-    # --- Game Loop ---
     try:
         obs = env.reset()
         terminated = False
@@ -214,117 +214,193 @@ def run_interactive_mode(args):
 
         running = True
         while running:
-            action = None # Action to be taken in this step
+            action = None
 
-            # --- Handle Pygame Events (Needed for window closing, human input, agent quit key) ---
+            # 处理 Pygame 事件
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                     break
-                if args.human and event.type == pygame.MOUSEBUTTONDOWN: # Human input
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # 人类点击输入
                     x, y = event.pos
-                    col = x // env_instance.cell_size # Use attributes from raw env
+                    col = x // env_instance.cell_size
                     row = y // env_instance.cell_size
-                    if 0 <= row < env_instance.height and 0 <= col < env_instance.width:
-                        # Check if cell is already revealed using the raw env's state
-                        if not env_instance.revealed[row, col]:
-                            action = [row * env_instance.width + col] # Action is index
-                        else:
-                            print("Cell already revealed.")
-                elif not args.human and event.type == pygame.KEYDOWN: # Agent quit key
-                     if event.key == pygame.K_q:
-                          print("Quitting interactive agent play...")
-                          running = False
-                          break
+                    
+                    if (0 <= row < env_instance.height and 
+                        0 <= col < env_instance.width and 
+                        not env_instance.revealed[row, col]):
+                        action = [row * env_instance.width + col]
+                    else:
+                        print("Cell already revealed or out of bounds.")
 
-            if not running: break
+            if not running:
+                break
 
-            # --- Determine Action ---
-            if not args.human and action is None: # Agent's turn (and no quit event)
-                action_masks = env.env_method("action_masks")[0]
-                action, _states = model.predict(obs,
-                                                action_masks=action_masks,
-                                                deterministic=True)
-                # Optional: Print agent action
-                print(f"Agent action: {action}")
-                time.sleep(args.delay) # Use delay arg
-
-            # --- Perform Action (if any determined) ---
+            # 执行动作（如果有）
             if action is not None:
-                 obs, reward, terminated_arr, info_arr = env.step(action) # Step the VecEnv
-                 terminated = terminated_arr[0]
-                 actual_info = info_arr[0] # Get info from the single underlying env
-                 current_game_won = actual_info.get('is_success', False)
-                 truncated = actual_info.get('TimeLimit.truncated', False)
-                 reward = reward[0] # Get reward from the single env
-                 # obs is already updated
+                obs, reward, terminated_arr, info_arr = env.step(action)
+                terminated = terminated_arr[0]
+                actual_info = info_arr[0]
+                current_game_won = actual_info.get('is_success', False)
+                truncated = actual_info.get('TimeLimit.truncated', False)
+                reward = reward[0]
 
-                 total_reward += reward
-                 step_count += 1
-                 # Optional: Print step info
-                 print(f"Step: {step_count}, Action: {action[0]}, Reward: {reward:.2f}, Done: {terminated}")
+                total_reward += reward
+                step_count += 1
+                
+                print(f"Step: {step_count}, Action: {action[0]}, Reward: {reward:.2f}, Done: {terminated}")
 
+                # 检查游戏结束
+                if terminated or truncated:
+                    total_games += 1
+                    if current_game_won:
+                        player_wins += 1
+                        print("Game Over - YOU WIN!")
+                    else:
+                        if terminated:
+                            print("Game Over - YOU LOSE!")
+                        else:
+                            print("Game Over!")
 
-                 # --- Check Game End for Statistics ---
-                 if terminated or truncated:
-                     total_games += 1
-                     if current_game_won:
-                         player_wins += 1
-                         print("Game Over - YOU WIN!")
-                     else:
-                          if terminated: # Only print lose if actually terminated (not just truncated)
-                               print("Game Over - YOU LOSE!")
-                          else:
-                               print("Game Over!")
+                    print(f"Final Reward: {total_reward:.2f}, Steps: {step_count}")
+                    current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
+                    print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
 
-                     print(f"Final Reward: {total_reward:.2f}, Steps: {step_count}")
-                     current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
-                     print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
-
-                     time.sleep(2) # Pause before reset
-                     print("Resetting environment...")
-                     obs = env.reset() # Reset the environment
-                     total_reward = 0
-                     step_count = 0
-                     terminated = False # Reset flags for new game
-                     truncated = False
-                     current_game_won = False
-
+                    time.sleep(2)  # 暂停显示结果
+                    print("Resetting environment...")
+                    obs = env.reset()
+                    total_reward = 0
+                    step_count = 0
+                    terminated = False
+                    truncated = False
+                    current_game_won = False
             else:
-                 # If no action was taken (e.g., human didn't click),
-                 # we still need to render to keep the window updated.
-                 # The environment's step usually handles rendering, but only if called.
-                 # Call the underlying env's render method directly.
-                 env_instance._render_frame()
-
+                # 没有动作时仍需渲染以保持窗口更新
+                env_instance._render_frame()
 
     except KeyboardInterrupt:
-        print("\nInteractive mode interrupted by user.")
+        print("\nHuman mode interrupted by user.")
     finally:
-        # --- Final Statistics After Exiting ---
-        print("\n--- Final Interactive Mode Statistics ---")
-        win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
-        print(f"Total Games Played: {total_games}")
-        print(f"{player_type} Wins: {player_wins}")
-        print(f"{player_type} Win Rate: {win_rate:.2f}%")
-
+        print_final_statistics(total_games, player_wins, "Human")
         env.close()
         print("Environment closed. Game exited.")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Play Minesweeper interactively or run batch agent tests.")
+def run_agent_mode(args):
+    """
+    智能体演示模式：智能体在有界面环境中进行游戏演示。
+    """
+    print("--- Running Agent Mode ---")
 
-    # --- Mode Selection ---
+    # 创建环境（有渲染）
+    env, env_instance = create_environment(args, render_mode='human')
+    setup_random_seed(args, env)
+    
+    # 加载模型
+    model, env = load_model_and_environment(args, env)
+    if model is None:
+        env.close()
+        return
+
+    # 游戏统计
+    total_games = 0
+    agent_wins = 0
+
+    try:
+        obs = env.reset()
+        terminated = False
+        truncated = False
+        total_reward = 0
+        step_count = 0
+        current_game_won = False
+
+        running = True
+        while running:
+            # 处理 Pygame 事件（主要是退出事件）
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                    break
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        print("Quitting agent mode...")
+                        running = False
+                        break
+
+            if not running:
+                break
+
+            # 智能体决策
+            action_masks = env.env_method("action_masks")[0]
+            action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
+            
+            print(f"Agent action: {action}")
+            time.sleep(args.delay)  # 延迟以便观察
+
+            # 执行动作
+            obs, reward, terminated_arr, info_arr = env.step(action)
+            terminated = terminated_arr[0]
+            actual_info = info_arr[0]
+            current_game_won = actual_info.get('is_success', False)
+            truncated = actual_info.get('TimeLimit.truncated', False)
+            reward = reward[0]
+
+            total_reward += reward
+            step_count += 1
+            
+            print(f"Step: {step_count}, Action: {action[0]}, Reward: {reward:.2f}, Done: {terminated}")
+
+            # 检查游戏结束
+            if terminated or truncated:
+                total_games += 1
+                if current_game_won:
+                    agent_wins += 1
+                    print("Game Over - AGENT WINS!")
+                else:
+                    if terminated:
+                        print("Game Over - AGENT LOSES!")
+                    else:
+                        print("Game Over!")
+
+                print(f"Final Reward: {total_reward:.2f}, Steps: {step_count}")
+                current_win_rate = (agent_wins / total_games * 100) if total_games > 0 else 0
+                print(f"--- Stats so far --- Games: {total_games}, Wins: {agent_wins}, Win Rate: {current_win_rate:.2f}% ---")
+
+                time.sleep(2)  # 暂停显示结果
+                print("Resetting environment...")
+                obs = env.reset()
+                total_reward = 0
+                step_count = 0
+                terminated = False
+                truncated = False
+                current_game_won = False
+
+    except KeyboardInterrupt:
+        print("\nAgent mode interrupted by user.")
+    finally:
+        print_final_statistics(total_games, agent_wins, "Agent")
+        env.close()
+        print("Environment closed. Game exited.")
+
+
+# ===== 主程序 =====
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Play Minesweeper in different modes.")
+
+    # --- 模式选择 ---
     parser.add_argument("--human", action="store_true", help="Enable human play mode (interactive).")
     parser.add_argument("--batch", action="store_true", help="Enable batch mode (agent plays without rendering).")
     parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run in batch mode.")
 
-    # --- Paths and Naming ---
-    parser.add_argument("--training_run_dir", type=str, default=config.EXPERIMENT_BASE_DIR, help="Directory to training dir of save models and stats")
-    parser.add_argument("--checkpoint_steps", type=int, default=None, help="Specific checkpoint step to load (uses latest if not specified)")
+    # --- 路径和命名 ---
+    parser.add_argument("--training_run_dir", type=str, default=config.EXPERIMENT_BASE_DIR, 
+                        help="Directory to training dir of save models and stats")
+    parser.add_argument("--checkpoint_steps", type=int, default=None, 
+                        help="Specific checkpoint step to load (uses latest if not specified)")
 
-    # --- Environment Parameters ---
+    # --- 环境参数 ---
     parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
     parser.add_argument("--height", type=int, default=config.HEIGHT, help="Height of the Minesweeper grid")
     parser.add_argument("--n_mines", type=int, default=config.N_MINES, help="Number of mines in the grid")
@@ -334,11 +410,11 @@ if __name__ == "__main__":
     parser.add_argument("--reward_invalid", type=float, default=config.REWARD_INVALID, help="Penalty for clicking revealed cells")
     parser.add_argument("--max_reward_per_step", type=float, default=config.MAX_REWARD_PER_STEP, help="Maximum reward in one step")
 
-    # --- Execution Parameters ---
+    # --- 执行参数 ---
     parser.add_argument("--delay", type=float, default=0.1, help="Delay (in seconds) between agent moves in interactive mode.")
-    parser.add_argument("--device", type=str, default="cpu", choices=["auto", "cpu", "cuda"], help="Device to use for loading the model (auto, cpu, cuda)")
+    parser.add_argument("--device", type=str, default="cpu", choices=["auto", "cpu", "cuda"], 
+                        help="Device to use for loading the model (auto, cpu, cuda)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for environment reset (optional)")
-
 
     args = parser.parse_args()
 
@@ -347,22 +423,22 @@ if __name__ == "__main__":
         print(f"{arg}: {value}")
     print("--------------------------")
 
-    # --- Smart Model and Stats Path Resolution ---
+    # --- 智能路径解析 ---
     try:
-        # Check if training_run_dir is a run directory (contains models/ subdirectory)
+        # 检查 training_run_dir 是否是运行目录（包含 models/ 子目录）
         models_dir = os.path.join(args.training_run_dir, "models")
         if os.path.exists(models_dir):
             checkpoint_dir = models_dir
         else:
-            # Assume training_run_dir is already the models directory
+            # 假设 training_run_dir 已经是 models 目录
             checkpoint_dir = args.training_run_dir
         
-        # Find the best checkpoint to load
+        # 查找最佳检查点
         best_checkpoint = find_best_checkpoint(checkpoint_dir, args.checkpoint_steps)
         args.model_path = best_checkpoint
         print(f"Selected checkpoint: {os.path.basename(best_checkpoint)}")
         
-        # Find corresponding VecNormalize stats file
+        # 查找对应的 VecNormalize 统计文件
         args.stats_path = find_vecnormalize_stats(best_checkpoint)
         if args.stats_path:
             print(f"Found VecNormalize stats: {os.path.basename(args.stats_path)}")
@@ -380,12 +456,14 @@ if __name__ == "__main__":
         print(f"Error setting up model paths: {e}")
         exit(1)
 
-    # --- Run Selected Mode ---
+    # --- 运行选定的模式 ---
     if args.batch:
         if args.human:
             print("Error: Cannot use --human and --batch simultaneously.")
-        else:
-            run_batch_mode(args) # Pass all parsed args
+            exit(1)
+        run_batch_mode(args)
+    elif args.human:
+        run_human_mode(args)
     else:
-        # Default to interactive mode (human or agent)
-        run_interactive_mode(args) # Pass all parsed args
+        # 默认为智能体演示模式
+        run_agent_mode(args)
