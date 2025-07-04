@@ -16,6 +16,8 @@ from minesweeper_env import MinesweeperEnv
 import config
 # 导入 checkpoint 相关工具函数
 from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
+# 导入模型工厂
+from model_factory import create_inference_model
 
 def run_batch_mode(args):
     """
@@ -47,29 +49,36 @@ def run_batch_mode(args):
         env.seed(args.seed)
         print(f"Using random seed: {args.seed}")
 
-    # --- Load VecNormalize stats IF path is provided and exists ---
-    stats_path = args.stats_path # Use arg value
-    if stats_path and os.path.exists(stats_path):
-         print(f"Loading VecNormalize stats from: {stats_path}")
-         env = VecNormalize.load(stats_path, env)
-         env.training = False # Set to evaluation mode
-         env.norm_reward = False # Don't normalize reward during evaluation
-         print("VecNormalize stats loaded.")
-    else:
-         print(f"VecNormalize stats path not found or not specified: {stats_path}. Using unnormalized environment.")
-
-
-    # --- Model Loading ---
+    # --- Model and Environment Loading ---
     model_path = args.model_path # Use arg value
+    stats_path = args.stats_path # Use arg value
+    
     if not model_path or not os.path.exists(model_path):
         print(f"Error: Model path not found: {model_path}")
         env.close()
         return
 
     print(f"Loading model: {model_path}")
-    # Use device specified in args
-    model = MaskablePPO.load(model_path, env=env, device=args.device)
-    print(f"Model loaded on device: {model.device}")
+    
+    try:
+        model, env = create_inference_model(
+            env=env,
+            checkpoint_path=model_path,
+            vecnormalize_stats_path=stats_path,
+            device=args.device
+        )
+        print(f"Model loaded on device: {model.device}")
+        
+        # Set VecNormalize to evaluation mode if it was loaded
+        if hasattr(env, 'training'):
+            env.training = False
+            env.norm_reward = False
+            print("VecNormalize set to evaluation mode")
+        
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        env.close()
+        return
 
     # --- Batch Game Loop ---
     total_games = 0
@@ -161,31 +170,38 @@ def run_interactive_mode(args):
         env.seed(args.seed)
         print(f"Using random seed: {args.seed}")
 
-    # --- Load VecNormalize stats IF path is provided and exists ---
-    stats_path = args.stats_path # Use arg value
-    if stats_path and os.path.exists(stats_path):
-         print(f"Loading VecNormalize stats from: {stats_path}")
-         env = VecNormalize.load(stats_path, env)
-         env.training = False # Set to evaluation mode
-         env.norm_reward = False # Don't normalize reward during evaluation
-         print("VecNormalize stats loaded.")
-    else:
-         print(f"VecNormalize stats path not found or not specified: {stats_path}. Using unnormalized environment.")
-
-
     # --- Model Loading (only if agent is playing) ---
     model = None
     if not args.human: # If agent is playing
         model_path = args.model_path # Use arg value
+        stats_path = args.stats_path # Use arg value
+        
         if not model_path or not os.path.exists(model_path):
             print(f"Error: Model path not found: {model_path}")
             env.close()
             return
 
         print(f"Loading model: {model_path}")
-        # Use device specified in args
-        model = MaskablePPO.load(model_path, env=env, device=args.device)
-        print(f"Model loaded on device: {model.device}")
+        
+        try:
+            model, env = create_inference_model(
+                env=env,
+                checkpoint_path=model_path,
+                vecnormalize_stats_path=stats_path,
+                device=args.device
+            )
+            print(f"Model loaded on device: {model.device}")
+            
+            # Set VecNormalize to evaluation mode if it was loaded
+            if hasattr(env, 'training'):
+                env.training = False
+                env.norm_reward = False
+                print("VecNormalize set to evaluation mode")
+                
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            env.close()
+            return
 
     # --- Game Loop ---
     try:

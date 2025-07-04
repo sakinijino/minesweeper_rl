@@ -15,6 +15,8 @@ from custom_cnn import CustomCNN
 import config
 # 导入 checkpoint 相关工具函数
 from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
+# 导入模型工厂
+from model_factory import create_model
 
 def parse_int_list(string_list):
     """Helper function to parse comma-separated integers."""
@@ -175,19 +177,11 @@ if __name__ == '__main__':
     try:
         pi_layer_sizes = parse_int_list(args.pi_layers)
         vf_layer_sizes = parse_int_list(args.vf_layers)
-        # Assuming Stable Baselines3 expects a list containing one dict for MLP arch after features
-        NET_ARCH_CONFIG = dict(pi=pi_layer_sizes, vf=vf_layer_sizes)
-        print(f"Parsed net_arch: {NET_ARCH_CONFIG}")
+        print(f"Parsed policy layers: {pi_layer_sizes}")
+        print(f"Parsed value layers: {vf_layer_sizes}")
     except argparse.ArgumentTypeError as e:
         print(f"Error parsing network layers: {e}")
         exit(1)
-
-    # --- Define Policy Kwargs ---
-    POLICY_KWARGS = dict(
-        features_extractor_class=CustomCNN,
-        features_extractor_kwargs=dict(features_dim=args.features_dim),
-        net_arch=NET_ARCH_CONFIG
-    )
 
     # --- Create Environment Function ---
     def create_env():
@@ -233,49 +227,53 @@ if __name__ == '__main__':
 
 
     # --- Create or Load MaskablePPO Model ---
+    # Prepare model configuration
+    model_config = {
+        'n_steps': args.n_steps,
+        'batch_size': args.batch_size,
+        'n_epochs': args.n_epochs,
+        'learning_rate': args.learning_rate,
+        'ent_coef': args.ent_coef,
+        'gamma': args.gamma,
+        'gae_lambda': args.gae_lambda,
+        'clip_range': args.clip_range,
+        'vf_coef': args.vf_coef,
+        'device': args.device,
+        'seed': args.seed
+    }
+    
+    # Determine checkpoint and stats paths for continue training
+    checkpoint_to_load = checkpoint_path if continue_training else None
+    vecnormalize_stats_path = None
+    
     if continue_training and checkpoint_path:
-        # Load model from checkpoint
         print(f"Loading model from checkpoint: {checkpoint_path}")
-        model = MaskablePPO.load(
-            checkpoint_path,
-            env=train_env,
-            device=args.device,
-            # Note: some hyperparameters might be overridden by the saved model
-        )
-        # Set tensorboard logging for continue training
-        model.tensorboard_log = specific_log_dir
-        print(f"Model loaded from checkpoint on device: {model.device}")
-        print(f"TensorBoard logging set to: {specific_log_dir}")
-        
-        # Load VecNormalize stats if available
-        vecnormalize_path = find_vecnormalize_stats(checkpoint_path)
-        if vecnormalize_path:
-            print(f"Loading VecNormalize stats from: {vecnormalize_path}")
-            train_env = VecNormalize.load(vecnormalize_path, train_env)
+        vecnormalize_stats_path = find_vecnormalize_stats(checkpoint_path)
+        if vecnormalize_stats_path:
+            print(f"Found VecNormalize stats: {vecnormalize_stats_path}")
         else:
             print("Warning: Could not find corresponding VecNormalize stats file")
-            
     else:
-        # Create new model
-        model = MaskablePPO(
-            "CnnPolicy",
-            train_env,
-            verbose=1,
-            n_steps=args.n_steps,
-            batch_size=args.batch_size,
-            n_epochs=args.n_epochs,
-            learning_rate=args.learning_rate,
-            ent_coef=args.ent_coef,
-            gamma=args.gamma,
-            gae_lambda=args.gae_lambda,
-            clip_range=args.clip_range,
-            vf_coef=args.vf_coef,
-            policy_kwargs=POLICY_KWARGS,
+        print("Creating new model...")
+    
+    # Create model using factory
+    try:
+        model, train_env = create_model(
+            env=train_env,
+            checkpoint_path=checkpoint_to_load,
+            vecnormalize_stats_path=vecnormalize_stats_path,
             tensorboard_log=specific_log_dir,
-            device=args.device,
-            seed=args.seed
+            features_dim=args.features_dim,
+            pi_layers=pi_layer_sizes,
+            vf_layers=vf_layer_sizes,
+            **model_config
         )
-        print(f"New model created on device: {model.device}")
+        print(f"Model created/loaded successfully on device: {model.device}")
+        if continue_training:
+            print(f"TensorBoard logging set to: {specific_log_dir}")
+    except Exception as e:
+        print(f"Error creating model: {e}")
+        exit(1)
 
     # --- Training ---
     if continue_training:
