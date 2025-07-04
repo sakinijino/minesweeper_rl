@@ -18,43 +18,38 @@ import config
 from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
 # 导入模型工厂
 from model_factory import create_inference_model
+# 导入环境工厂
+from environment_factory import create_inference_environment
 
 
 # ===== 共享辅助函数 =====
 
-def create_environment(args, render_mode=None):
+def create_environment(args, render_mode=None, vecnormalize_stats_path=None):
     """
-    创建 Minesweeper 环境实例。
+    创建 Minesweeper 环境实例（使用环境工厂）。
     
     Args:
         args: 命令行参数
         render_mode: 渲染模式 ('human', None, 'rgb_array')
+        vecnormalize_stats_path: VecNormalize统计文件路径
         
     Returns:
         配置好的环境实例
     """
-    def create_env_instance():
-        return MinesweeperEnv(
-            width=args.width,
-            height=args.height,
-            n_mines=args.n_mines,
-            reward_win=args.reward_win,
-            reward_lose=args.reward_lose,
-            reward_reveal=args.reward_reveal,
-            reward_invalid=args.reward_invalid,
-            max_reward_per_step=args.max_reward_per_step,
-            render_mode=render_mode
-        )
-    
-    # 为交互模式返回原始环境实例和包装后的环境
+    # 确定模式
     if render_mode == 'human':
-        env_instance = create_env_instance()
-        env = DummyVecEnv([lambda: env_instance])
-        return env, env_instance
+        mode = 'interactive'
     else:
-        # 批量模式只需要包装后的环境
-        env = DummyVecEnv([lambda: create_env_instance()])
-        return env, None
+        mode = 'batch'
+    
+    # 使用环境工厂创建推理环境
+    env, raw_env = create_inference_environment(
+        args, 
+        mode=mode,
+        vecnormalize_stats_path=vecnormalize_stats_path
+    )
+    
+    return env, raw_env
 
 
 def setup_random_seed(args, env):
@@ -132,7 +127,7 @@ def run_batch_mode(args):
     print(f"--- Running Batch Mode ({args.num_episodes} episodes) ---")
 
     # 创建环境（无渲染）
-    env, _ = create_environment(args, render_mode=None)
+    env, _ = create_environment(args, render_mode=None, vecnormalize_stats_path=args.stats_path)
     setup_random_seed(args, env)
     
     # 加载模型
@@ -188,17 +183,11 @@ def run_human_mode(args):
     print("--- Running Human Mode ---")
 
     # 创建环境（有渲染）
-    env, env_instance = create_environment(args, render_mode='human')
+    env, env_instance = create_environment(args, render_mode='human', vecnormalize_stats_path=args.stats_path)
     setup_random_seed(args, env)
     
     # 人类模式不需要加载模型，但需要处理 VecNormalize
-    stats_path = args.stats_path
-    if stats_path and os.path.exists(stats_path):
-        print(f"Loading VecNormalize stats from: {stats_path}")
-        env = VecNormalize.load(stats_path, env)
-        env.training = False
-        env.norm_reward = False
-        print("VecNormalize stats loaded.")
+    # VecNormalize 统计已经在环境工厂中处理了（如果提供了 stats_path）
 
     # 游戏统计
     total_games = 0
@@ -294,7 +283,7 @@ def run_agent_mode(args):
     print("--- Running Agent Mode ---")
 
     # 创建环境（有渲染）
-    env, env_instance = create_environment(args, render_mode='human')
+    env, env_instance = create_environment(args, render_mode='human', vecnormalize_stats_path=args.stats_path)
     setup_random_seed(args, env)
     
     # 加载模型

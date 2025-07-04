@@ -17,6 +17,8 @@ import config
 from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
 # 导入模型工厂
 from model_factory import create_model
+# 导入环境工厂
+from environment_factory import create_training_environment
 
 
 # ===== 辅助函数 =====
@@ -233,45 +235,22 @@ def parse_network_architecture(args):
         exit(1)
 
 
-def create_training_environment(args):
+def create_training_env(args, vecnormalize_stats_path=None):
     """
-    创建训练环境。
+    创建训练环境（使用环境工厂）。
     
     Args:
         args: 命令行参数
+        vecnormalize_stats_path: VecNormalize统计文件路径
         
     Returns:
         VecNormalize: 配置好的向量化环境
     """
-    def create_env():
-        """Creates an instance of the Minesweeper environment."""
-        env = MinesweeperEnv(
-            width=args.width,
-            height=args.height,
-            n_mines=args.n_mines,
-            reward_win=args.reward_win,
-            reward_lose=args.reward_lose,
-            reward_reveal=args.reward_reveal,
-            reward_invalid=args.reward_invalid,
-            max_reward_per_step=args.max_reward_per_step,
-            render_mode=None # No rendering during training
-        )
-        return env
-
-    # Create Vectorized Environment
+    # 确定向量化环境类型
     vec_env_cls = SubprocVecEnv if args.vec_env_type == "subproc" and args.n_envs > 1 else DummyVecEnv
     print(f"Using VecEnv type: {vec_env_cls.__name__}")
-
-    train_env = make_vec_env(
-        create_env,
-        n_envs=args.n_envs,
-        seed=args.seed,
-        vec_env_cls=vec_env_cls
-    )
-    # Normalize rewards, but not observations (as observations are already normalized in env)
-    train_env = VecNormalize(train_env, norm_obs=False, norm_reward=True, clip_obs=10., gamma=args.gamma)
     
-    return train_env
+    return create_training_environment(args, vecnormalize_stats_path)
 
 
 def setup_checkpoint_callback(args, specific_model_dir):
