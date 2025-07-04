@@ -13,8 +13,8 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
 
-from minesweeper_env import MinesweeperEnv
-import config
+from ..env.minesweeper_env import MinesweeperEnv
+from ..utils import config
 
 
 class EnvironmentCreationError(Exception):

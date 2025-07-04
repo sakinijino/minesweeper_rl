@@ -7,7 +7,7 @@ import gymnasium as gym
 import numpy as np
 
 # Import modules we'll be testing (will be created)
-from environment_factory import (
+from src.factories.environment_factory import (
     create_env_config,
     create_base_environment,
     create_vectorized_environment,
@@ -103,7 +103,7 @@ class TestBaseEnvironment:
             'render_mode': None
         }
         
-        with patch('environment_factory.MinesweeperEnv') as mock_env_class:
+        with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
             mock_env = Mock()
             mock_env_class.return_value = mock_env
             
@@ -116,7 +116,7 @@ class TestBaseEnvironment:
         """Test creating base environment with custom render mode."""
         config = create_env_config(render_mode='human')
         
-        with patch('environment_factory.MinesweeperEnv') as mock_env_class:
+        with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
             mock_env = Mock()
             mock_env_class.return_value = mock_env
             
@@ -130,7 +130,7 @@ class TestBaseEnvironment:
         """Test error handling in base environment creation."""
         config = create_env_config()
         
-        with patch('environment_factory.MinesweeperEnv') as mock_env_class:
+        with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
             mock_env_class.side_effect = Exception("Environment creation failed")
             
             with pytest.raises(EnvironmentCreationError, match="Failed to create base environment"):
@@ -150,7 +150,7 @@ class TestVectorizedEnvironment:
     
     def test_create_vectorized_environment_single_env(self, mock_base_env):
         """Test creating vectorized environment with single environment."""
-        with patch('environment_factory.DummyVecEnv') as mock_vec_env:
+        with patch('src.factories.environment_factory.DummyVecEnv') as mock_vec_env:
             mock_vectorized = Mock()
             mock_vec_env.return_value = mock_vectorized
             
@@ -167,7 +167,7 @@ class TestVectorizedEnvironment:
     
     def test_create_vectorized_environment_multi_env_subproc(self, mock_base_env):
         """Test creating vectorized environment with multiple SubprocVecEnv."""
-        with patch('environment_factory.make_vec_env') as mock_make_vec_env:
+        with patch('src.factories.environment_factory.make_vec_env') as mock_make_vec_env:
             mock_vectorized = Mock()
             mock_make_vec_env.return_value = mock_vectorized
             
@@ -188,7 +188,7 @@ class TestVectorizedEnvironment:
     
     def test_create_vectorized_environment_multi_env_dummy_fallback(self, mock_base_env):
         """Test fallback to DummyVecEnv for dummy type with multiple envs."""
-        with patch('environment_factory.DummyVecEnv') as mock_vec_env:
+        with patch('src.factories.environment_factory.DummyVecEnv') as mock_vec_env:
             mock_vectorized = Mock()
             mock_vec_env.return_value = mock_vectorized
             
@@ -205,7 +205,7 @@ class TestVectorizedEnvironment:
     
     def test_create_vectorized_environment_auto_type_selection(self, mock_base_env):
         """Test automatic vec_env_type selection."""
-        with patch('environment_factory.make_vec_env') as mock_make_vec_env:
+        with patch('src.factories.environment_factory.make_vec_env') as mock_make_vec_env:
             mock_vectorized = Mock()
             mock_make_vec_env.return_value = mock_vectorized
             
@@ -235,7 +235,7 @@ class TestVecNormalizeHandling:
         mock_env = Mock()
         mock_normalized_env = Mock()
         
-        with patch('environment_factory.VecNormalize') as mock_vecnorm:
+        with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
             mock_vecnorm.load.return_value = mock_normalized_env
             
             result_env = load_vecnormalize_stats(mock_env, stats_path)
@@ -266,7 +266,7 @@ class TestVecNormalizeHandling:
         mock_env = Mock()
         mock_normalized_env = Mock()
         
-        with patch('environment_factory.VecNormalize') as mock_vecnorm:
+        with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
             mock_vecnorm.load.return_value = mock_normalized_env
             
             result_env = load_vecnormalize_stats(
@@ -300,8 +300,8 @@ class TestTrainingEnvironment:
         mock_args.seed = None
         mock_args.gamma = 0.99
         
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
-            with patch('environment_factory.VecNormalize') as mock_vecnorm:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
+            with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
                 mock_vec_env = Mock()
                 mock_normalized_env = Mock()
                 mock_create_vec.return_value = mock_vec_env
@@ -338,9 +338,9 @@ class TestTrainingEnvironment:
         mock_args.seed = 42
         mock_args.gamma = 0.95
         
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
-            with patch('environment_factory.VecNormalize') as mock_vecnorm:
-                with patch('environment_factory.load_vecnormalize_stats') as mock_load_stats:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
+            with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
+                with patch('src.factories.environment_factory.load_vecnormalize_stats') as mock_load_stats:
                     mock_vec_env = Mock()
                     mock_normalized_env = Mock()
                     mock_stats_env = Mock()
@@ -378,7 +378,7 @@ class TestInferenceEnvironment:
         mock_args.max_reward_per_step = 5.0
         mock_args.seed = 123
         
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             mock_vec_env = Mock()
             mock_create_vec.return_value = mock_vec_env
             
@@ -408,8 +408,8 @@ class TestInferenceEnvironment:
         mock_args.max_reward_per_step = 3.0
         mock_args.seed = 456
         
-        with patch('environment_factory.create_base_environment') as mock_create_base:
-            with patch('environment_factory.DummyVecEnv') as mock_dummy_vec:
+        with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
+            with patch('src.factories.environment_factory.DummyVecEnv') as mock_dummy_vec:
                 mock_base_env = Mock()
                 mock_vec_env = Mock()
                 mock_create_base.return_value = mock_base_env
@@ -441,8 +441,8 @@ class TestInferenceEnvironment:
         mock_args.max_reward_per_step = 2.0
         mock_args.seed = None
         
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
-            with patch('environment_factory.load_vecnormalize_stats') as mock_load_stats:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
+            with patch('src.factories.environment_factory.load_vecnormalize_stats') as mock_load_stats:
                 mock_vec_env = Mock()
                 mock_stats_env = Mock()
                 mock_create_vec.return_value = mock_vec_env
@@ -482,8 +482,8 @@ class TestSeedHandling:
         mock_args.seed = 789
         mock_args.gamma = 0.99
         
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
-            with patch('environment_factory.VecNormalize') as mock_vecnorm:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
+            with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
                 mock_vec_env = Mock()
                 mock_normalized_env = Mock()
                 mock_create_vec.return_value = mock_vec_env
@@ -529,7 +529,7 @@ class TestErrorHandling:
         mock_args.seed = None
         mock_args.gamma = 0.99
         
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             mock_create_vec.side_effect = Exception("Vectorization failed")
             
             with pytest.raises(EnvironmentCreationError, match="Failed to create training environment"):
@@ -555,8 +555,8 @@ class TestIntegrationScenarios:
         mock_args.seed = 42
         mock_args.gamma = 0.99
         
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
-            with patch('environment_factory.VecNormalize') as mock_vecnorm:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
+            with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
                 mock_vec_env = Mock()
                 mock_normalized_env = Mock()
                 mock_create_vec.return_value = mock_vec_env
@@ -584,7 +584,7 @@ class TestIntegrationScenarios:
         mock_args.seed = 123
         
         # Test batch mode
-        with patch('environment_factory.create_vectorized_environment') as mock_create_vec:
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             mock_vec_env = Mock()
             mock_create_vec.return_value = mock_vec_env
             
@@ -599,8 +599,8 @@ class TestIntegrationScenarios:
             assert call_kwargs['vec_env_type'] == 'dummy'
         
         # Test interactive mode
-        with patch('environment_factory.create_base_environment') as mock_create_base:
-            with patch('environment_factory.DummyVecEnv') as mock_dummy_vec:
+        with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
+            with patch('src.factories.environment_factory.DummyVecEnv') as mock_dummy_vec:
                 mock_base_env = Mock()
                 mock_vec_env = Mock()
                 mock_create_base.return_value = mock_base_env

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.vec_env import VecNormalize
-from custom_cnn import CustomCNN
+from ..env.custom_cnn import CustomCNN
 
 
 class ModelCreationError(Exception):

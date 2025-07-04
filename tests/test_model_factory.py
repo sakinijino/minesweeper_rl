@@ -6,15 +6,15 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
 # Import modules we'll be testing (will be created)
-from model_factory import (
+from src.factories.model_factory import (
     create_policy_kwargs,
     create_new_model,
     load_model_from_checkpoint,
     create_model,
     ModelCreationError
 )
-from custom_cnn import CustomCNN
-from minesweeper_env import MinesweeperEnv
+from src.env.custom_cnn import CustomCNN
+from src.env.minesweeper_env import MinesweeperEnv
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from sb3_contrib import MaskablePPO
 
@@ -106,7 +106,7 @@ class TestNewModelCreation:
     
     def test_create_new_model_success(self, mock_env, sample_args):
         """Test successful creation of new model."""
-        with patch('model_factory.MaskablePPO') as mock_ppo:
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_model = Mock()
             mock_ppo.return_value = mock_model
             
@@ -140,7 +140,7 @@ class TestNewModelCreation:
             'net_arch': {'pi': [128], 'vf': [256]}
         }
         
-        with patch('model_factory.MaskablePPO') as mock_ppo:
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_model = Mock()
             mock_ppo.return_value = mock_model
             
@@ -156,7 +156,7 @@ class TestNewModelCreation:
     
     def test_create_new_model_without_tensorboard_log(self, mock_env, sample_args):
         """Test creating new model without tensorboard logging."""
-        with patch('model_factory.MaskablePPO') as mock_ppo:
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_model = Mock()
             mock_ppo.return_value = mock_model
             
@@ -191,7 +191,7 @@ class TestModelLoadingFromCheckpoint:
         checkpoint_path = os.path.join(temp_dir, "model.zip")
         Path(checkpoint_path).touch()
         
-        with patch('model_factory.MaskablePPO') as mock_ppo:
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_model = Mock()
             mock_ppo.load.return_value = mock_model
             
@@ -213,7 +213,7 @@ class TestModelLoadingFromCheckpoint:
         checkpoint_path = os.path.join(temp_dir, "model.zip")
         Path(checkpoint_path).touch()
         
-        with patch('model_factory.MaskablePPO') as mock_ppo:
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_model = Mock()
             mock_ppo.load.return_value = mock_model
             
@@ -242,7 +242,7 @@ class TestModelLoadingFromCheckpoint:
         checkpoint_path = os.path.join(temp_dir, "model.zip")
         Path(checkpoint_path).touch()
         
-        with patch('model_factory.MaskablePPO') as mock_ppo:
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_ppo.load.side_effect = Exception("Load failed")
             
             with pytest.raises(ModelCreationError, match="Failed to load model"):
@@ -265,11 +265,11 @@ class TestVecNormalizeHandling:
         mock_env = Mock()
         mock_updated_env = Mock()
         
-        with patch('model_factory.VecNormalize') as mock_vecnorm:
+        with patch('src.factories.model_factory.VecNormalize') as mock_vecnorm:
             mock_vecnorm.load.return_value = mock_updated_env
             
             # Import the function we'll create
-            from model_factory import load_vecnormalize_stats
+            from src.factories.model_factory import load_vecnormalize_stats
             
             updated_env = load_vecnormalize_stats(mock_env, stats_path)
             
@@ -281,7 +281,7 @@ class TestVecNormalizeHandling:
         nonexistent_path = os.path.join(temp_dir, "nonexistent.pkl")
         mock_env = Mock()
         
-        from model_factory import load_vecnormalize_stats
+        from src.factories.model_factory import load_vecnormalize_stats
         
         # Should return original environment when stats file doesn't exist
         result_env = load_vecnormalize_stats(mock_env, nonexistent_path)
@@ -291,7 +291,7 @@ class TestVecNormalizeHandling:
         """Test loading VecNormalize stats with None path."""
         mock_env = Mock()
         
-        from model_factory import load_vecnormalize_stats
+        from src.factories.model_factory import load_vecnormalize_stats
         
         result_env = load_vecnormalize_stats(mock_env, None)
         assert result_env == mock_env
@@ -330,7 +330,7 @@ class TestCreateModelUnified:
     
     def test_create_model_new_model(self, mock_env, sample_model_config):
         """Test creating new model through unified interface."""
-        with patch('model_factory.create_new_model') as mock_create_new:
+        with patch('src.factories.model_factory.create_new_model') as mock_create_new:
             mock_model = Mock()
             mock_create_new.return_value = mock_model
             
@@ -349,8 +349,8 @@ class TestCreateModelUnified:
         checkpoint_path = os.path.join(temp_dir, "model.zip")
         Path(checkpoint_path).touch()
         
-        with patch('model_factory.load_model_from_checkpoint') as mock_load:
-            with patch('model_factory.load_vecnormalize_stats') as mock_load_stats:
+        with patch('src.factories.model_factory.load_model_from_checkpoint') as mock_load:
+            with patch('src.factories.model_factory.load_vecnormalize_stats') as mock_load_stats:
                 mock_model = Mock()
                 mock_updated_env = Mock()
                 mock_load.return_value = mock_model
@@ -449,7 +449,7 @@ class TestIntegrationScenarios:
             'vf_layers': [256, 256]
         }
         
-        with patch('model_factory.create_new_model') as mock_create_new:
+        with patch('src.factories.model_factory.create_new_model') as mock_create_new:
             mock_model = Mock()
             mock_create_new.return_value = mock_model
             
@@ -470,8 +470,8 @@ class TestIntegrationScenarios:
         checkpoint_path = os.path.join(temp_dir, "model.zip")
         Path(checkpoint_path).touch()
         
-        with patch('model_factory.load_model_from_checkpoint') as mock_load:
-            with patch('model_factory.load_vecnormalize_stats') as mock_load_stats:
+        with patch('src.factories.model_factory.load_model_from_checkpoint') as mock_load:
+            with patch('src.factories.model_factory.load_vecnormalize_stats') as mock_load_stats:
                 mock_model = Mock()
                 mock_load.return_value = mock_model
                 mock_load_stats.return_value = mock_normalized_env

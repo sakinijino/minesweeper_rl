@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 # Import the functions from the new checkpoint_utils module
-from checkpoint_utils import (
+from src.utils.checkpoint_utils import (
     find_checkpoint_files,
     extract_steps_from_checkpoint, 
     find_best_checkpoint,

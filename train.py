@@ -9,16 +9,16 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNorm
 from stable_baselines3.common.callbacks import CheckpointCallback
 
 # 导入你的环境类和特征提取器
-from minesweeper_env import MinesweeperEnv
-from custom_cnn import CustomCNN
+from src.env.minesweeper_env import MinesweeperEnv
+from src.env.custom_cnn import CustomCNN
 # 导入 config 来获取默认路径和环境参数
-import config
+from src.utils import config
 # 导入 checkpoint 相关工具函数
-from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
+from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
 # 导入模型工厂
-from model_factory import create_model
+from src.factories.model_factory import create_model
 # 导入环境工厂
-from environment_factory import create_training_environment
+from src.factories.environment_factory import create_training_environment
 
 
 # ===== 辅助函数 =====

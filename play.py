@@ -11,15 +11,15 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
 
 # 导入你的环境类
-from minesweeper_env import MinesweeperEnv
+from src.env.minesweeper_env import MinesweeperEnv
 # 导入 config 来获取默认值
-import config
+from src.utils import config
 # 导入 checkpoint 相关工具函数
-from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
+from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
 # 导入模型工厂
-from model_factory import create_inference_model
+from src.factories.model_factory import create_inference_model
 # 导入环境工厂
-from environment_factory import create_inference_environment
+from src.factories.environment_factory import create_inference_environment
 
 
 # ===== 共享辅助函数 =====
