@@ -14,7 +14,7 @@ from custom_cnn import CustomCNN
 # 导入 config 来获取默认路径和环境参数
 import config
 # 导入 checkpoint 相关工具函数
-from checkpoint_utils import find_best_checkpoint, load_training_config
+from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
 
 def parse_int_list(string_list):
     """Helper function to parse comma-separated integers."""
@@ -248,21 +248,8 @@ if __name__ == '__main__':
         print(f"TensorBoard logging set to: {specific_log_dir}")
         
         # Load VecNormalize stats if available
-        checkpoint_dir = os.path.dirname(checkpoint_path)
-        vecnormalize_path = None
-        
-        # Try to find the corresponding VecNormalize file
-        checkpoint_name = os.path.basename(checkpoint_path)
-        if checkpoint_name == "final_model.zip":
-            vecnormalize_path = os.path.join(checkpoint_dir, "final_stats_vecnormalize.pkl")
-        else:
-            # For checkpoint files like rl_model_50000_steps.zip, look for vecnormalize_50000_steps.pkl
-            match = re.search(r'rl_model_(\d+)_steps\.zip', checkpoint_name)
-            if match:
-                steps = match.group(1)
-                vecnormalize_path = os.path.join(checkpoint_dir, f"vecnormalize_{steps}_steps.pkl")
-        
-        if vecnormalize_path and os.path.exists(vecnormalize_path):
+        vecnormalize_path = find_vecnormalize_stats(checkpoint_path)
+        if vecnormalize_path:
             print(f"Loading VecNormalize stats from: {vecnormalize_path}")
             train_env = VecNormalize.load(vecnormalize_path, train_env)
         else:

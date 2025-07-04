@@ -119,3 +119,41 @@ def load_training_config(config_path):
     except Exception as e:
         print(f"Warning: Could not load training config from {config_path}: {e}")
         return None
+
+
+def find_vecnormalize_stats(checkpoint_path):
+    """Find the corresponding VecNormalize stats file for a checkpoint.
+    
+    Args:
+        checkpoint_path (str): Path to the checkpoint file
+        
+    Returns:
+        str or None: Path to the VecNormalize stats file, or None if not found
+    """
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+    checkpoint_name = os.path.basename(checkpoint_path)
+    
+    # Determine expected stats filename based on checkpoint name
+    if checkpoint_name == "final_model.zip":
+        stats_candidates = ["final_stats_vecnormalize.pkl"]
+    else:
+        # Extract steps from checkpoint filename
+        match = re.search(r'rl_model_(\d+)_steps\.zip', checkpoint_name)
+        if match:
+            steps = match.group(1)
+            # Try different naming patterns that have been used
+            stats_candidates = [
+                f"rl_model_vecnormalize_{steps}_steps.pkl",  # New pattern
+                f"vecnormalize_{steps}_steps.pkl",           # Alternative pattern
+                "final_stats_vecnormalize.pkl"               # Fallback
+            ]
+        else:
+            stats_candidates = ["final_stats_vecnormalize.pkl"]
+    
+    # Try each candidate and return the first one that exists
+    for stats_filename in stats_candidates:
+        stats_path = os.path.join(checkpoint_dir, stats_filename)
+        if os.path.exists(stats_path):
+            return stats_path
+    
+    return None

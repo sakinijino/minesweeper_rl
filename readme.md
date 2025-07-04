@@ -163,8 +163,20 @@ The play.py script allows you to interact with the environment or test a trained
 
 Specify the parameters matching the training run of the model you want to load.
 ```bash
+# Use latest checkpoint (default behavior)
 python play.py \
-  --training_run_dir ./training_runs/ppo_run_4x4x3_seed42_20250512-224809/ \
+  --training_run_dir ./training_runs/ppo_run_5x5x3_seed42_20250515-085710/ \
+  --width 5 \
+  --height 5 \
+  --n_mines 3 \
+  --delay 0.2 \
+  --seed 42 \
+  --device "cuda"
+
+# Use specific checkpoint step
+python play.py \
+  --training_run_dir ./training_runs/ppo_run_5x5x3_seed42_20250515-085710/ \
+  --checkpoint_steps 100000 \
   --width 5 \
   --height 5 \
   --n_mines 3 \
@@ -173,15 +185,29 @@ python play.py \
   --device "cuda"
 
 # --training_run_dir: Directory to training dir of save models and stats
+# --checkpoint_steps: Specific checkpoint step to load (optional, uses latest if not specified)
 ```
 
 **Agent Batch Evaluation (No Graphics)**
 Run the agent for a specified number of episodes and calculate the win rate. Ideal for headless environments like Colab.
 ```bash
+# Evaluate latest checkpoint
 python play.py \
   --batch \
   --num_episodes 200 \
-  --training_run_dir ./training_runs/ppo_run_4x4x3_seed42_20250512-224809/
+  --training_run_dir ./training_runs/ppo_run_5x5x3_seed42_20250515-085710/ \
+  --width 5 \
+  --height 5 \
+  --n_mines 3 \
+  --seed 42 \
+  --device "cuda"
+
+# Evaluate specific checkpoint step
+python play.py \
+  --batch \
+  --num_episodes 200 \
+  --training_run_dir ./training_runs/ppo_run_5x5x3_seed42_20250515-085710/ \
+  --checkpoint_steps 150000 \
   --width 5 \
   --height 5 \
   --n_mines 3 \
@@ -189,6 +215,7 @@ python play.py \
   --device "cuda"
 
 # --training_run_dir: Directory to training dir of save models and stats
+# --checkpoint_steps: Specific checkpoint step to load (optional, uses latest if not specified)
 ```
 
 **Play Manually (Interactive)**

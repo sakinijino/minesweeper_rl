@@ -14,6 +14,8 @@ from stable_baselines3.common.utils import set_random_seed
 from minesweeper_env import MinesweeperEnv
 # 导入 config 来获取默认值
 import config
+# 导入 checkpoint 相关工具函数
+from checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
 
 def run_batch_mode(args):
     """
@@ -304,6 +306,7 @@ if __name__ == "__main__":
 
     # --- Paths and Naming ---
     parser.add_argument("--training_run_dir", type=str, default=config.EXPERIMENT_BASE_DIR, help="Directory to training dir of save models and stats")
+    parser.add_argument("--checkpoint_steps", type=int, default=None, help="Specific checkpoint step to load (uses latest if not specified)")
 
     # --- Environment Parameters ---
     parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
@@ -328,8 +331,38 @@ if __name__ == "__main__":
         print(f"{arg}: {value}")
     print("--------------------------")
 
-    args.model_path = os.path.join(args.training_run_dir, "models", "final_model.zip")
-    args.stats_path = os.path.join(args.training_run_dir, "models", "final_stats_vecnormalize.pkl")
+    # --- Smart Model and Stats Path Resolution ---
+    try:
+        # Check if training_run_dir is a run directory (contains models/ subdirectory)
+        models_dir = os.path.join(args.training_run_dir, "models")
+        if os.path.exists(models_dir):
+            checkpoint_dir = models_dir
+        else:
+            # Assume training_run_dir is already the models directory
+            checkpoint_dir = args.training_run_dir
+        
+        # Find the best checkpoint to load
+        best_checkpoint = find_best_checkpoint(checkpoint_dir, args.checkpoint_steps)
+        args.model_path = best_checkpoint
+        print(f"Selected checkpoint: {os.path.basename(best_checkpoint)}")
+        
+        # Find corresponding VecNormalize stats file
+        args.stats_path = find_vecnormalize_stats(best_checkpoint)
+        if args.stats_path:
+            print(f"Found VecNormalize stats: {os.path.basename(args.stats_path)}")
+        else:
+            print("Warning: No VecNormalize stats file found, using unnormalized environment")
+        
+        print(f"Model path: {args.model_path}")
+        print(f"Stats path: {args.stats_path}")
+        
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        print("Please check that the training_run_dir contains valid checkpoint files.")
+        exit(1)
+    except Exception as e:
+        print(f"Error setting up model paths: {e}")
+        exit(1)
 
     # --- Run Selected Mode ---
     if args.batch:
