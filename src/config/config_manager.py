@@ -85,7 +85,7 @@ class ConfigManager:
         
         # Deep merge updates
         for section, section_updates in updates.items():
-            if section in current_dict and isinstance(section_updates, dict):
+            if section in current_dict and current_dict[section] is not None and isinstance(section_updates, dict):
                 current_dict[section].update(section_updates)
             else:
                 current_dict[section] = section_updates
@@ -104,7 +104,7 @@ class ConfigManager:
         
         updates = {}
         for arg_name, value in vars(args).items():
-            if arg_name in arg_to_config_map:
+            if arg_name in arg_to_config_map and value is not None:
                 section, param_name = arg_to_config_map[arg_name]
                 if section not in updates:
                     updates[section] = {}

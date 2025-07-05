@@ -61,15 +61,16 @@ def create_env_config(
     # Determine default values from ConfigManager if provided, otherwise use defaults
     if config_manager is not None:
         env_config_obj = config_manager.config.environment_config
+        # Use ConfigManager values if available, otherwise use hardcoded defaults
         defaults = {
-            'width': env_config_obj.width,
-            'height': env_config_obj.height,
-            'n_mines': env_config_obj.n_mines,
-            'reward_win': env_config_obj.reward_win,
-            'reward_lose': env_config_obj.reward_lose,
-            'reward_reveal': env_config_obj.reward_reveal,
-            'reward_invalid': env_config_obj.reward_invalid,
-            'max_reward_per_step': env_config_obj.max_reward_per_step,
+            'width': env_config_obj.width if env_config_obj.width is not None else 16,
+            'height': env_config_obj.height if env_config_obj.height is not None else 16,
+            'n_mines': env_config_obj.n_mines if env_config_obj.n_mines is not None else 40,
+            'reward_win': env_config_obj.reward_win if env_config_obj.reward_win is not None else 10.0,
+            'reward_lose': env_config_obj.reward_lose if env_config_obj.reward_lose is not None else -10.0,
+            'reward_reveal': env_config_obj.reward_reveal if env_config_obj.reward_reveal is not None else 1.0,
+            'reward_invalid': env_config_obj.reward_invalid if env_config_obj.reward_invalid is not None else -1.0,
+            'max_reward_per_step': env_config_obj.max_reward_per_step if env_config_obj.max_reward_per_step is not None else 10.0,
         }
     else:
         # Fallback defaults for compatibility
