@@ -32,7 +32,7 @@ def setup_argument_parser():
 
     # Core training arguments - simplified for most common overrides
     parser.add_argument("--config", type=str, default=None, 
-                        help="Path to configuration file (JSON format)")
+                        help="Path to configuration file (YAML or JSON format)")
     parser.add_argument("--total_timesteps", type=int, default=None, 
                         help="Total training timesteps")
     parser.add_argument("--learning_rate", type=float, default=None, 
@@ -126,13 +126,13 @@ def load_and_setup_config(args):
         Tuple[ConfigManager, bool, str, dict, str]: 
         (config_manager, continue_training, checkpoint_path, loaded_config, original_run_dir)
     """
-    config_manager = ConfigManager()
-    
     # Handle continue training first
     continue_training = False
     checkpoint_path = None
     loaded_config = None
     original_run_dir = None
+    
+    config_manager = None
     
     if args.continue_from:
         continue_training = True
@@ -146,10 +146,14 @@ def load_and_setup_config(args):
             
             # Load configuration from training run
             try:
+                config_manager = ConfigManager()
                 config_manager.load_from_training_run(original_run_dir)
                 print(f"Loaded configuration from training run: {original_run_dir}")
             except FileNotFoundError:
-                print(f"Warning: No training config found in {original_run_dir}, using defaults")
+                print(f"Warning: No training config found in {original_run_dir}")
+                if not args.config:
+                    print("Error: No configuration source provided for continue training")
+                    exit(1)
         
         # Find the best checkpoint to continue from
         try:
@@ -160,41 +164,56 @@ def load_and_setup_config(args):
             exit(1)
     
     # Load configuration file if specified
-    elif args.config:
+    if args.config:
         try:
-            config_manager.load_from_file(args.config)
+            if config_manager is None:
+                config_manager = ConfigManager(args.config)
+            else:
+                config_manager.load_config_file(args.config)
             print(f"Loaded configuration from file: {args.config}")
         except FileNotFoundError:
             print(f"Error: Configuration file not found: {args.config}")
             exit(1)
-        except json.JSONDecodeError as e:
-            print(f"Error: Invalid JSON in configuration file: {e}")
+        except Exception as e:
+            print(f"Error: Invalid configuration file format: {e}")
             exit(1)
     
-    # Update configuration with command line arguments
-    config_manager.update_from_args(args)
+    # Check if we have any configuration source
+    if config_manager is None:
+        print("Error: No configuration source provided. Use --config to specify a configuration file.")
+        exit(1)
+    
+    # Load command line arguments
+    if args:
+        config_manager.load_from_args(args)
     
     # Handle pi_layers and vf_layers parsing
-    if args.pi_layers:
+    if args.pi_layers or args.vf_layers:
+        # We need to build config first to modify it
+        config = config_manager.build_config()
+        
+        if args.pi_layers:
+            try:
+                pi_layers = [int(x.strip()) for x in args.pi_layers.split(',') if x.strip()]
+                config.network_architecture.pi_layers = pi_layers
+            except ValueError as e:
+                print(f"Error parsing pi_layers: {e}")
+                exit(1)
+        
+        if args.vf_layers:
+            try:
+                vf_layers = [int(x.strip()) for x in args.vf_layers.split(',') if x.strip()]
+                config.network_architecture.vf_layers = vf_layers
+            except ValueError as e:
+                print(f"Error parsing vf_layers: {e}")
+                exit(1)
+    else:
+        # Build configuration
         try:
-            pi_layers = [int(x.strip()) for x in args.pi_layers.split(',') if x.strip()]
-            config_manager.config.network_architecture.pi_layers = pi_layers
-        except ValueError as e:
-            print(f"Error parsing pi_layers: {e}")
+            config = config_manager.build_config()
+        except Exception as e:
+            print(f"Error building configuration: {e}")
             exit(1)
-    
-    if args.vf_layers:
-        try:
-            vf_layers = [int(x.strip()) for x in args.vf_layers.split(',') if x.strip()]
-            config_manager.config.network_architecture.vf_layers = vf_layers
-        except ValueError as e:
-            print(f"Error parsing vf_layers: {e}")
-            exit(1)
-    
-    # Validate configuration
-    if not config_manager.validate_config():
-        print("Error: Invalid configuration parameters")
-        exit(1)
     
     return config_manager, continue_training, checkpoint_path, loaded_config, original_run_dir
 
@@ -261,7 +280,7 @@ def save_training_config(config_manager, config_save_path):
         config_save_path: Path to save configuration
     """
     try:
-        config_manager.save_to_file(config_save_path)
+        config_manager.save_config(config_save_path)
         print(f"Training configuration saved to: {config_save_path}")
     except Exception as e:
         print(f"Error saving configuration: {e}")
@@ -397,7 +416,7 @@ def run_training_loop(model, config_manager, checkpoint_callback, continue_train
 def print_training_configuration(config_manager):
     """Print training configuration information."""
     print("--- Training Configuration ---")
-    config_dict = config_manager.get_training_config().__dict__
+    config_dict = config_manager.get_config().__dict__
     for section, section_config in config_dict.items():
         print(f"{section}:")
         if hasattr(section_config, '__dict__'):

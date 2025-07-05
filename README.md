@@ -24,35 +24,26 @@ pip install -r requirements.txt
 ### Training
 
 ```bash
-# Basic training
-python train.py
+# Quick start with local configuration (for testing)
+python train.py --config configs/local_config.yaml
+
+# Quick start with Colab configuration (for long training)
+python train.py --config configs/colab_config.yaml
+
+# Override specific parameters
+python train.py --config configs/local_config.yaml \
+  --total_timesteps 50000 \
+  --learning_rate 0.0005
 
 # Advanced training with custom parameters (showcasing available options)
-python train.py \
+python train.py --config configs/colab_config.yaml \
   --total_timesteps 2_000_000 \
   --n_envs 8 \
-  --learning_rate 3e-4 \
+  --learning_rate 0.0003 \
   --batch_size 256 \
   --n_epochs 10 \
-  --gamma 0.99 \
-  --gae_lambda 0.95 \
-  --clip_range 0.2 \
-  --ent_coef 0.01 \
-  --vf_coef 0.5 \
-  --features_dim 256 \
-  --pi_layers 128 64 \
-  --vf_layers 512 256 128 \
-  --width 16 \
-  --height 16 \
-  --n_mines 40 \
-  --reward_win 10.0 \
-  --reward_lose -10.0 \
-  --reward_reveal 1.0 \
-  --reward_invalid -1.0 \
   --device cuda \
-  --seed 42 \
-  --checkpoint_freq 50000 \
-  --vec_env_type subproc
+  --seed 42
 ```
 
 ### Playing
@@ -87,7 +78,7 @@ python play.py --mode agent --config ./configs/my_config.json
 - **Custom Gymnasium Environment**: Full Minesweeper game logic with action masking
 - **MaskablePPO**: Prevents invalid moves (clicking revealed cells)
 - **Custom CNN**: Optimized for grid-based input processing
-- **Advanced Configuration System**: JSON-based config with automatic saving/loading
+- **Advanced Configuration System**: YAML/JSON-based config with parameter priority system
 - **Multiple Play Modes**: AI demonstration, batch evaluation, human play
 - **TensorBoard Integration**: Monitor training progress
 - **Checkpoint System**: Resume training from any checkpoint
@@ -129,28 +120,35 @@ tensorboard --logdir ./training_runs/
 
 ## Configuration System
 
-The new configuration system automatically saves all training parameters and allows easy reuse and modification:
+The new configuration system uses YAML/JSON files with a parameter priority system:
+
+**Priority (highest to lowest):**
+1. Command-line arguments
+2. Configuration file parameters  
+3. Continue training parameters
 
 ```bash
-# Training automatically saves config.json to the training run directory
-python train.py --width 16 --height 16 --n_mines 40 --learning_rate 3e-4
+# Use predefined configurations
+python train.py --config configs/local_config.yaml    # For local testing
+python train.py --config configs/colab_config.yaml    # For Colab training
 
-# Later, resume using saved config (loads all original parameters)
-python train.py --continue_from ./training_runs/latest_run/
+# Override specific parameters (command-line has highest priority)
+python train.py --config configs/local_config.yaml --learning_rate 0.0005
 
-# Override specific parameters while keeping the rest
-python train.py --continue_from ./training_runs/latest_run/ --learning_rate 1e-5
-
-# Save and load custom config files
-python train.py --save_config ./my_configs/large_grid.json --width 20 --height 20
-python train.py --config ./my_configs/large_grid.json
+# Continue training (loads config from original run)
+python train.py --continue_from ./training_runs/your_run/ --config configs/local_config.yaml
 ```
 
-Configuration files are saved in JSON format and include:
+**Configuration files support YAML and JSON formats:**
+- `configs/local_config.yaml` - Optimized for local testing (small env, fast training)
+- `configs/colab_config.yaml` - Optimized for Colab training (GPU, longer training)
+
+**Configuration includes:**
 - Model hyperparameters (learning rate, batch size, etc.)
 - Network architecture (CNN features, layer sizes)  
 - Environment settings (grid size, mines, rewards)
-- Training execution parameters (timesteps, checkpoints, etc.)
+- Training execution parameters (timesteps, checkpoints, device, etc.)
+- Paths configuration (experiment directory, model prefix)
 
 ## Continue Training
 
@@ -174,6 +172,9 @@ python train.py --continue_from ./training_runs/your_run_directory/ \
 
 ```
 minesweeper_rl/
+├── configs/               # Configuration files
+│   ├── local_config.yaml      # Local testing configuration
+│   └── colab_config.yaml      # Colab training configuration
 ├── src/
 │   ├── env/               # Environment and CNN implementations
 │   │   ├── minesweeper_env.py  # Custom Gymnasium environment

@@ -1,14 +1,19 @@
 """
 Configuration manager for the minesweeper RL training system.
 
-This module provides the ConfigManager class that handles loading, saving,
-merging, and validating configurations. It supports loading from files,
-command-line arguments, and provides utilities for configuration management.
+This module provides the ConfigManager class that handles loading, merging,
+and validating configurations with a priority system:
+1. Command-line arguments (highest priority)
+2. Configuration files
+3. Continue training parameters (lowest priority)
+
+Supports YAML and JSON configuration files.
 """
 
 import json
 import os
-from typing import Dict, Any, Optional, Union
+import yaml
+from typing import Dict, Any, Optional, Union, List
 from dataclasses import asdict, fields
 from argparse import Namespace
 
@@ -25,76 +30,73 @@ from .config_schemas import (
 )
 
 
+class ConfigurationError(Exception):
+    """Raised when configuration is invalid or missing required parameters."""
+    pass
+
+
 class ConfigManager:
     """
-    Manages configuration loading, saving, and updating for the training system.
+    Manages configuration loading, merging, and validation with priority system.
+    
+    Priority order (highest to lowest):
+    1. Command-line arguments
+    2. Configuration file
+    3. Continue training parameters
     """
     
-    def __init__(self, config: Optional[TrainingConfig] = None):
+    def __init__(self, config_file: Optional[str] = None):
         """
-        Initialize ConfigManager with optional configuration.
+        Initialize ConfigManager.
         
         Args:
-            config: Optional TrainingConfig instance. If None, creates default.
+            config_file: Optional path to configuration file to load
+            
+        Raises:
+            ConfigurationError: If no configuration source is provided
         """
-        self.config = config or TrainingConfig()
+        self.config_sources = {
+            'file': None,
+            'args': None,
+            'continue_train': None
+        }
+        
+        if config_file:
+            self.load_config_file(config_file)
+            
+        self.config = None
     
-    def load_from_file(self, file_path: str) -> None:
+    def load_config_file(self, file_path: str) -> None:
         """
-        Load configuration from JSON file.
+        Load configuration from YAML or JSON file.
         
         Args:
-            file_path: Path to JSON configuration file
+            file_path: Path to configuration file
             
         Raises:
             FileNotFoundError: If file does not exist
-            json.JSONDecodeError: If file contains invalid JSON
+            ConfigurationError: If file format is invalid
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Configuration file not found: {file_path}")
         
-        with open(file_path, 'r') as f:
-            config_dict = json.load(f)
-        
-        self.config = create_config_from_dict(config_dict)
+        try:
+            with open(file_path, 'r') as f:
+                if file_path.endswith(('.yaml', '.yml')):
+                    config_dict = yaml.safe_load(f)
+                elif file_path.endswith('.json'):
+                    config_dict = json.load(f)
+                else:
+                    raise ConfigurationError(f"Unsupported file format: {file_path}")
+            
+            self.config_sources['file'] = config_dict
+            
+        except (yaml.YAMLError, json.JSONDecodeError) as e:
+            raise ConfigurationError(f"Invalid configuration file format: {e}")
     
-    def save_to_file(self, file_path: str) -> None:
+    def load_from_args(self, args: Namespace) -> None:
         """
-        Save configuration to JSON file.
-        
-        Args:
-            file_path: Path where to save the configuration
-        """
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        
-        config_dict = asdict(self.config)
-        
-        with open(file_path, 'w') as f:
-            json.dump(config_dict, f, indent=4, sort_keys=True)
-    
-    def update_from_dict(self, updates: Dict[str, Any]) -> None:
-        """
-        Update configuration from dictionary.
-        
-        Args:
-            updates: Dictionary with configuration updates
-        """
-        # Create a new config from current state + updates
-        current_dict = asdict(self.config)
-        
-        # Deep merge updates
-        for section, section_updates in updates.items():
-            if section in current_dict and current_dict[section] is not None and isinstance(section_updates, dict):
-                current_dict[section].update(section_updates)
-            else:
-                current_dict[section] = section_updates
-        
-        self.config = create_config_from_dict(current_dict)
-    
-    def update_from_args(self, args: Namespace) -> None:
-        """
-        Update configuration from argparse Namespace.
+        Load configuration from command-line arguments.
         
         Args:
             args: Parsed command-line arguments
@@ -102,16 +104,100 @@ class ConfigManager:
         # Map argument names to configuration sections
         arg_to_config_map = self._create_arg_mapping()
         
-        updates = {}
+        config_dict = {}
         for arg_name, value in vars(args).items():
             if arg_name in arg_to_config_map and value is not None:
                 section, param_name = arg_to_config_map[arg_name]
-                if section not in updates:
-                    updates[section] = {}
-                updates[section][param_name] = value
+                if section not in config_dict:
+                    config_dict[section] = {}
+                config_dict[section][param_name] = value
         
-        if updates:
-            self.update_from_dict(updates)
+        if config_dict:
+            self.config_sources['args'] = config_dict
+    
+    def load_from_training_run(self, run_dir: str) -> None:
+        """
+        Load configuration from a training run directory.
+        
+        Args:
+            run_dir: Path to training run directory
+            
+        Raises:
+            FileNotFoundError: If training_config.json not found
+        """
+        config_path = os.path.join(run_dir, "training_config.json")
+        
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Training config not found: {config_path}")
+        
+        with open(config_path, 'r') as f:
+            config_dict = json.load(f)
+        
+        self.config_sources['continue_train'] = config_dict
+    
+    def build_config(self) -> TrainingConfig:
+        """
+        Build final configuration by merging all sources with priority.
+        
+        Returns:
+            TrainingConfig: Complete configuration object
+            
+        Raises:
+            ConfigurationError: If required parameters are missing
+        """
+        # Start with empty config
+        merged_config = {}
+        
+        # Apply sources in reverse priority order
+        for source_name in ['continue_train', 'file', 'args']:
+            source_config = self.config_sources[source_name]
+            if source_config:
+                merged_config = self._deep_merge(merged_config, source_config)
+        
+        # Validate that all required parameters are present
+        self._validate_required_params(merged_config)
+        
+        # Create config object
+        self.config = create_config_from_dict(merged_config)
+        
+        # Validate configuration
+        if not validate_training_config(self.config):
+            raise ConfigurationError("Configuration validation failed")
+        
+        return self.config
+    
+    def _validate_required_params(self, config_dict: Dict[str, Any]) -> None:
+        """
+        Validate that all required parameters are present.
+        
+        Args:
+            config_dict: Configuration dictionary to validate
+            
+        Raises:
+            ConfigurationError: If required parameters are missing
+        """
+        required_sections = {
+            'model_hyperparams': ModelHyperparams,
+            'network_architecture': NetworkArchitecture,
+            'environment_config': EnvironmentConfig,
+            'training_execution': TrainingExecutionConfig,
+            'paths_config': PathsConfig
+        }
+        
+        missing_params = []
+        
+        for section_name, section_class in required_sections.items():
+            if section_name not in config_dict:
+                missing_params.append(f"Missing section: {section_name}")
+                continue
+            
+            section_dict = config_dict[section_name]
+            for field in fields(section_class):
+                if field.name not in section_dict:
+                    missing_params.append(f"Missing parameter: {section_name}.{field.name}")
+        
+        if missing_params:
+            raise ConfigurationError(f"Required parameters missing:\\n" + "\\n".join(missing_params))
     
     def _create_arg_mapping(self) -> Dict[str, tuple]:
         """
@@ -149,85 +235,6 @@ class ConfigManager:
         
         return mapping
     
-    def get_training_config(self) -> TrainingConfig:
-        """
-        Get the complete training configuration.
-        
-        Returns:
-            TrainingConfig: Current training configuration
-        """
-        return self.config
-    
-    def get_environment_config(self) -> EnvironmentConfig:
-        """
-        Get the environment configuration.
-        
-        Returns:
-            EnvironmentConfig: Current environment configuration
-        """
-        return self.config.environment_config
-    
-    def get_play_config(self) -> PlayConfig:
-        """
-        Get the play configuration.
-        
-        Returns:
-            PlayConfig: Current play configuration
-        """
-        if self.config.play_config is None:
-            # Create default play config with current environment config
-            self.config.play_config = PlayConfig(
-                environment_config=self.config.environment_config
-            )
-        return self.config.play_config
-    
-    def validate_config(self) -> bool:
-        """
-        Validate the current configuration.
-        
-        Returns:
-            bool: True if configuration is valid, False otherwise
-        """
-        return validate_training_config(self.config)
-    
-    def merge_configs(self, other_config: TrainingConfig) -> TrainingConfig:
-        """
-        Merge another configuration with the current one.
-        
-        Args:
-            other_config: Configuration to merge
-            
-        Returns:
-            TrainingConfig: New merged configuration
-        """
-        # Convert both configs to dictionaries
-        current_dict = asdict(self.config)
-        other_dict = asdict(other_config)
-        
-        # Remove None values from other_dict to avoid overriding existing values
-        other_dict = self._remove_none_values(other_dict)
-        
-        # Deep merge (other_config takes precedence)
-        merged_dict = self._deep_merge(current_dict, other_dict)
-        
-        return create_config_from_dict(merged_dict)
-    
-    def _remove_none_values(self, d: Dict[str, Any]) -> Dict[str, Any]:
-        """Remove None values from dictionary recursively."""
-        if not isinstance(d, dict):
-            return d
-        
-        result = {}
-        for key, value in d.items():
-            if isinstance(value, dict):
-                cleaned_value = self._remove_none_values(value)
-                if cleaned_value:  # Only add if not empty
-                    result[key] = cleaned_value
-            elif value is not None:
-                result[key] = value
-        
-        return result
-    
     def _deep_merge(self, dict1: Dict[str, Any], dict2: Dict[str, Any]) -> Dict[str, Any]:
         """
         Deep merge two dictionaries.
@@ -249,83 +256,104 @@ class ConfigManager:
         
         return result
     
-    def load_from_training_run(self, run_dir: str) -> None:
+    def save_config(self, file_path: str) -> None:
         """
-        Load configuration from a training run directory.
+        Save current configuration to file.
         
         Args:
-            run_dir: Path to training run directory
+            file_path: Path where to save the configuration
             
         Raises:
-            FileNotFoundError: If training_config.json not found
+            ConfigurationError: If no configuration has been built
         """
-        config_path = os.path.join(run_dir, "training_config.json")
-        self.load_from_file(config_path)
+        if self.config is None:
+            raise ConfigurationError("No configuration to save. Call build_config() first.")
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        config_dict = asdict(self.config)
+        
+        if file_path.endswith(('.yaml', '.yml')):
+            with open(file_path, 'w') as f:
+                yaml.dump(config_dict, f, default_flow_style=False, indent=2)
+        elif file_path.endswith('.json'):
+            with open(file_path, 'w') as f:
+                json.dump(config_dict, f, indent=4, sort_keys=True)
+        else:
+            raise ConfigurationError(f"Unsupported file format: {file_path}")
     
-    @staticmethod
-    def create_default_config() -> TrainingConfig:
+    def get_config(self) -> TrainingConfig:
         """
-        Create a default training configuration.
+        Get the current configuration.
         
         Returns:
-            TrainingConfig: Default configuration
+            TrainingConfig: Current configuration
+            
+        Raises:
+            ConfigurationError: If no configuration has been built
         """
-        return TrainingConfig()
+        if self.config is None:
+            raise ConfigurationError("No configuration available. Call build_config() first.")
+        
+        return self.config
+    
+    def get_play_config(self) -> PlayConfig:
+        """
+        Get play configuration from current training config.
+        
+        Returns:
+            PlayConfig: Play configuration
+            
+        Raises:
+            ConfigurationError: If no configuration has been built
+        """
+        if self.config is None:
+            raise ConfigurationError("No configuration available. Call build_config() first.")
+        
+        if self.config.play_config is None:
+            # Create default play config with current environment config
+            self.config.play_config = PlayConfig(
+                mode="batch",
+                num_episodes=100,
+                delay=0.1,
+                checkpoint_steps=None,
+                environment_config=self.config.environment_config
+            )
+        
+        return self.config.play_config
     
     @staticmethod
-    def create_play_config(
-        training_config: TrainingConfig,
-        mode: str = "batch",
-        num_episodes: int = 100,
-        **kwargs
-    ) -> PlayConfig:
+    def create_from_config_file(config_file: str) -> 'ConfigManager':
         """
-        Create play configuration from training configuration.
+        Create ConfigManager from configuration file.
         
         Args:
-            training_config: Source training configuration
-            mode: Play mode
-            num_episodes: Number of episodes
-            **kwargs: Additional play configuration parameters
+            config_file: Path to configuration file
             
         Returns:
-            PlayConfig: Play configuration with environment settings
+            ConfigManager: Configured manager instance
         """
-        play_config = PlayConfig(
-            mode=mode,
-            num_episodes=num_episodes,
-            environment_config=training_config.environment_config,
-            **kwargs
-        )
-        
-        return play_config
+        manager = ConfigManager(config_file)
+        manager.build_config()
+        return manager
     
-    def get_model_hyperparams_dict(self) -> Dict[str, Any]:
+    @staticmethod
+    def create_with_args(config_file: str, args: Namespace) -> 'ConfigManager':
         """
-        Get model hyperparameters as dictionary suitable for model creation.
+        Create ConfigManager with config file and command-line arguments.
         
+        Args:
+            config_file: Path to configuration file
+            args: Command-line arguments
+            
         Returns:
-            Dict: Model hyperparameters
+            ConfigManager: Configured manager instance
         """
-        return asdict(self.config.model_hyperparams)
-    
-    def get_environment_params_dict(self) -> Dict[str, Any]:
-        """
-        Get environment parameters as dictionary suitable for environment creation.
-        
-        Returns:
-            Dict: Environment parameters
-        """
-        return asdict(self.config.environment_config)
-    
-    def get_training_params_dict(self) -> Dict[str, Any]:
-        """
-        Get training parameters as dictionary suitable for training setup.
-        
-        Returns:
-            Dict: Training parameters
-        """
-        return asdict(self.config.training_execution)
+        manager = ConfigManager(config_file)
+        manager.load_from_args(args)
+        manager.build_config()
+        return manager
     
     def __str__(self) -> str:
         """String representation of the configuration."""

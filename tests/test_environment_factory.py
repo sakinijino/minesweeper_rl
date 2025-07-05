@@ -21,13 +21,16 @@ from src.factories.environment_factory import (
 from src.config.config_manager import ConfigManager
 from src.config.config_schemas import EnvironmentConfig
 
+# Import test helper
+from tests.test_config_helper import create_test_config_manager
+
 
 class TestEnvConfig:
     """Test environment configuration creation."""
     
     def test_create_env_config_from_config_manager(self):
         """Test creating environment config from ConfigManager with default values."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         config = create_env_config(config_manager=config_manager)
         
         assert config is not None
@@ -48,13 +51,13 @@ class TestEnvConfig:
     
     def test_create_env_config_with_render_mode(self):
         """Test creating environment config with custom render mode."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         config = create_env_config(config_manager=config_manager, render_mode='human')
         
         assert config['render_mode'] == 'human'
         # Other values should come from ConfigManager
-        assert config['width'] == config_manager.config.environment_config.width
-        assert config['height'] == config_manager.config.environment_config.height
+        assert config['width'] == config_manager.get_config().environment_config.width
+        assert config['height'] == config_manager.get_config().environment_config.height
     
     def test_create_env_config_missing_config_manager(self):
         """Test that factory requires ConfigManager."""
@@ -63,9 +66,9 @@ class TestEnvConfig:
     
     def test_create_env_config_incomplete_config_manager(self):
         """Test that factory validates ConfigManager completeness."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         # Intentionally set a required value to None
-        config_manager.config.environment_config.width = None
+        config_manager.get_config().environment_config.width = None
         
         with pytest.raises(ValueError, match="ConfigManager.environment_config.width is None"):
             create_env_config(config_manager=config_manager)
@@ -76,7 +79,7 @@ class TestBaseEnvironment:
     
     def test_create_base_environment_success(self):
         """Test successful creation of base environment."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         config = create_env_config(config_manager=config_manager)
         
         with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
@@ -90,7 +93,7 @@ class TestBaseEnvironment:
     
     def test_create_base_environment_with_custom_render_mode(self):
         """Test creating base environment with custom render mode."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         config = create_env_config(config_manager=config_manager, render_mode='human')
         
         with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
@@ -105,7 +108,7 @@ class TestBaseEnvironment:
     
     def test_create_base_environment_error_handling(self):
         """Test error handling in base environment creation."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         config = create_env_config(config_manager=config_manager)
         
         with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
@@ -264,7 +267,7 @@ class TestTrainingEnvironment:
     
     def test_create_training_environment_success(self):
         """Test creating training environment with ConfigManager."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -282,7 +285,7 @@ class TestTrainingEnvironment:
                     norm_obs=False,
                     norm_reward=True,
                     clip_obs=10.0,
-                    gamma=config_manager.config.model_hyperparams.gamma
+                    gamma=config_manager.get_config().model_hyperparams.gamma
                 )
     
     def test_create_training_environment_with_stats(self, temp_dir):
@@ -290,7 +293,7 @@ class TestTrainingEnvironment:
         stats_path = os.path.join(temp_dir, "stats.pkl")
         Path(stats_path).touch()
         
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -326,7 +329,7 @@ class TestInferenceEnvironment:
     
     def test_create_inference_environment_batch_mode(self):
         """Test creating inference environment for batch mode."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             mock_vec_env = Mock()
@@ -347,7 +350,7 @@ class TestInferenceEnvironment:
     
     def test_create_inference_environment_interactive_mode(self):
         """Test creating inference environment for interactive mode (human/agent)."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         # Test human mode
         with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
@@ -390,7 +393,7 @@ class TestInferenceEnvironment:
         stats_path = os.path.join(temp_dir, "inference_stats.pkl")
         Path(stats_path).touch()
         
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.load_vecnormalize_stats') as mock_load_stats:
@@ -424,19 +427,19 @@ class TestSeedHandling:
     
     def test_seed_handling_in_vectorized_env(self):
         """Test that seed is properly passed to vectorized environment."""
-        config_manager = ConfigManager()
-        config_manager.config.environment_config.width = 5
-        config_manager.config.environment_config.height = 5
-        config_manager.config.environment_config.n_mines = 3
-        config_manager.config.environment_config.reward_win = 10.0
-        config_manager.config.environment_config.reward_lose = -10.0
-        config_manager.config.environment_config.reward_reveal = 1.0
-        config_manager.config.environment_config.reward_invalid = -1.0
-        config_manager.config.environment_config.max_reward_per_step = 2.0
-        config_manager.config.training_execution.n_envs = 2
-        config_manager.config.training_execution.vec_env_type = 'dummy'
-        config_manager.config.training_execution.seed = 789
-        config_manager.config.model_hyperparams.gamma = 0.99
+        config_manager = create_test_config_manager()
+        config_manager.get_config().environment_config.width = 5
+        config_manager.get_config().environment_config.height = 5
+        config_manager.get_config().environment_config.n_mines = 3
+        config_manager.get_config().environment_config.reward_win = 10.0
+        config_manager.get_config().environment_config.reward_lose = -10.0
+        config_manager.get_config().environment_config.reward_reveal = 1.0
+        config_manager.get_config().environment_config.reward_invalid = -1.0
+        config_manager.get_config().environment_config.max_reward_per_step = 2.0
+        config_manager.get_config().training_execution.n_envs = 2
+        config_manager.get_config().training_execution.vec_env_type = 'dummy'
+        config_manager.get_config().training_execution.seed = 789
+        config_manager.get_config().model_hyperparams.gamma = 0.99
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -497,15 +500,15 @@ class TestIntegrationScenarios:
     
     def test_train_py_workflow_simulation(self):
         """Test simulating the train.py environment creation workflow."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         # Set custom training configuration
-        config_manager.config.environment_config.width = 10
-        config_manager.config.environment_config.height = 10
-        config_manager.config.environment_config.n_mines = 15
-        config_manager.config.training_execution.n_envs = 8
-        config_manager.config.training_execution.vec_env_type = 'subproc'
-        config_manager.config.training_execution.seed = 42
-        config_manager.config.model_hyperparams.gamma = 0.99
+        config_manager.get_config().environment_config.width = 10
+        config_manager.get_config().environment_config.height = 10
+        config_manager.get_config().environment_config.n_mines = 15
+        config_manager.get_config().training_execution.n_envs = 8
+        config_manager.get_config().training_execution.vec_env_type = 'subproc'
+        config_manager.get_config().training_execution.seed = 42
+        config_manager.get_config().model_hyperparams.gamma = 0.99
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -525,12 +528,12 @@ class TestIntegrationScenarios:
     
     def test_play_py_workflow_simulation(self):
         """Test simulating the play.py environment creation workflow."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         # Set custom play configuration
-        config_manager.config.environment_config.width = 8
-        config_manager.config.environment_config.height = 8
-        config_manager.config.environment_config.n_mines = 12
-        config_manager.config.training_execution.seed = 123
+        config_manager.get_config().environment_config.width = 8
+        config_manager.get_config().environment_config.height = 8
+        config_manager.get_config().environment_config.n_mines = 12
+        config_manager.get_config().training_execution.seed = 123
         
         # Test batch mode
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:

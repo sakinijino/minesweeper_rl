@@ -1,0 +1,40 @@
+# Colab环境配置 - 适用于Google Colab训练
+# 针对GPU资源和较长训练时间优化
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128  # 更大的特征维度
+  pi_layers: [64, 64]  # 更深的网络
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  max_reward_per_step: None
+
+training_execution:
+  total_timesteps: 1_000_000  # 更长的训练时间
+  n_envs: 16  # 更多并行环境
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"  # 强制使用GPU
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

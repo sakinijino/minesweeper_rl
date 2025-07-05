@@ -18,75 +18,75 @@ from typing import List, Optional, Union
 @dataclass
 class ModelHyperparams:
     """Model training hyperparameters for PPO algorithm."""
-    learning_rate: float = 1e-4
-    ent_coef: float = 0.01
-    gamma: float = 0.99
-    gae_lambda: float = 0.90
-    clip_range: float = 0.2
-    vf_coef: float = 1.0
-    n_steps: int = 1024
-    batch_size: int = 128
-    n_epochs: int = 10
+    learning_rate: float
+    ent_coef: float
+    gamma: float
+    gae_lambda: float
+    clip_range: float
+    vf_coef: float
+    n_steps: int
+    batch_size: int
+    n_epochs: int
 
 
 @dataclass
 class NetworkArchitecture:
     """Neural network architecture configuration."""
-    features_dim: int = 128
-    pi_layers: List[int] = field(default_factory=lambda: [64, 64])
-    vf_layers: List[int] = field(default_factory=lambda: [256, 256])
+    features_dim: int
+    pi_layers: List[int]
+    vf_layers: List[int]
 
 
 @dataclass
 class EnvironmentConfig:
     """Minesweeper environment configuration."""
-    width: int = 16
-    height: int = 16
-    n_mines: int = 40
-    reward_win: float = 10.0
-    reward_lose: float = -10.0
-    reward_reveal: float = 1.0
-    reward_invalid: float = -1.0
-    max_reward_per_step: float = 10.0
+    width: int
+    height: int
+    n_mines: int
+    reward_win: float
+    reward_lose: float
+    reward_reveal: float
+    reward_invalid: float
+    max_reward_per_step: float
 
 
 @dataclass
 class TrainingExecutionConfig:
     """Training execution and system configuration."""
-    total_timesteps: int = 1_000_000
-    n_envs: int = 4
-    vec_env_type: str = "subproc"
-    checkpoint_freq: int = 50000
-    device: str = "auto"
-    seed: Optional[int] = None
+    total_timesteps: int
+    n_envs: int
+    vec_env_type: str
+    checkpoint_freq: int
+    device: str
+    seed: Optional[int]
 
 
 @dataclass
 class PathsConfig:
     """Paths and file naming configuration."""
-    experiment_base_dir: str = "experiments"
-    model_prefix: str = "minesweeper_ppo"
+    experiment_base_dir: str
+    model_prefix: str
 
 
 @dataclass
 class PlayConfig:
     """Play mode configuration."""
-    mode: str = "batch"
-    num_episodes: int = 100
-    delay: float = 0.1
-    checkpoint_steps: Optional[int] = None
-    environment_config: Optional[EnvironmentConfig] = None
+    mode: str
+    num_episodes: int
+    delay: float
+    checkpoint_steps: Optional[int]
+    environment_config: Optional[EnvironmentConfig]
 
 
 @dataclass
 class TrainingConfig:
     """Complete training configuration container."""
-    model_hyperparams: ModelHyperparams = field(default_factory=ModelHyperparams)
-    network_architecture: NetworkArchitecture = field(default_factory=NetworkArchitecture)
-    environment_config: EnvironmentConfig = field(default_factory=EnvironmentConfig)
-    training_execution: TrainingExecutionConfig = field(default_factory=TrainingExecutionConfig)
-    paths_config: PathsConfig = field(default_factory=PathsConfig)
-    play_config: Optional[PlayConfig] = None
+    model_hyperparams: ModelHyperparams
+    network_architecture: NetworkArchitecture
+    environment_config: EnvironmentConfig
+    training_execution: TrainingExecutionConfig
+    paths_config: PathsConfig
+    play_config: Optional[PlayConfig]
 
 
 # Utility functions for configuration schema operations

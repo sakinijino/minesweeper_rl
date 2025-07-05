@@ -22,13 +22,16 @@ from sb3_contrib import MaskablePPO
 from src.config.config_manager import ConfigManager
 from src.config.config_schemas import ModelHyperparams, NetworkArchitecture
 
+# Import test helper
+from tests.test_config_helper import create_test_config_manager
+
 
 class TestPolicyKwargs:
     """Test policy kwargs creation functionality."""
     
     def test_create_policy_kwargs_from_config_manager(self):
         """Test creating policy kwargs from ConfigManager with default values."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         policy_kwargs = create_policy_kwargs(config_manager=config_manager)
         
         assert policy_kwargs is not None
@@ -38,16 +41,16 @@ class TestPolicyKwargs:
         
         # Check that values come from ConfigManager
         assert policy_kwargs['features_extractor_class'] == CustomCNN
-        assert policy_kwargs['features_extractor_kwargs']['features_dim'] == config_manager.config.network_architecture.features_dim
-        assert policy_kwargs['net_arch']['pi'] == config_manager.config.network_architecture.pi_layers
-        assert policy_kwargs['net_arch']['vf'] == config_manager.config.network_architecture.vf_layers
+        assert policy_kwargs['features_extractor_kwargs']['features_dim'] == config_manager.get_config().network_architecture.features_dim
+        assert policy_kwargs['net_arch']['pi'] == config_manager.get_config().network_architecture.pi_layers
+        assert policy_kwargs['net_arch']['vf'] == config_manager.get_config().network_architecture.vf_layers
     
     def test_create_policy_kwargs_custom_config(self):
         """Test creating policy kwargs from ConfigManager with custom values."""
-        config_manager = ConfigManager()
-        config_manager.config.network_architecture.features_dim = 256
-        config_manager.config.network_architecture.pi_layers = [128, 64]
-        config_manager.config.network_architecture.vf_layers = [512, 256]
+        config_manager = create_test_config_manager()
+        config_manager.get_config().network_architecture.features_dim = 256
+        config_manager.get_config().network_architecture.pi_layers = [128, 64]
+        config_manager.get_config().network_architecture.vf_layers = [512, 256]
         
         policy_kwargs = create_policy_kwargs(config_manager=config_manager)
         
@@ -62,9 +65,9 @@ class TestPolicyKwargs:
     
     def test_create_policy_kwargs_incomplete_config_manager(self):
         """Test that factory validates ConfigManager completeness."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         # Intentionally set a required value to None
-        config_manager.config.network_architecture.features_dim = None
+        config_manager.get_config().network_architecture.features_dim = None
         
         with pytest.raises(ValueError, match="ConfigManager.network_architecture.features_dim is None"):
             create_policy_kwargs(config_manager=config_manager)
@@ -83,7 +86,7 @@ class TestNewModelCreation:
     
     def test_create_new_model_success(self, mock_env):
         """Test successful creation of new model with ConfigManager."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_model = Mock()
@@ -106,15 +109,15 @@ class TestNewModelCreation:
             assert call_args[1]['tensorboard_log'] == "/tmp/logs"
             
             # Check that values come from ConfigManager
-            model_config = config_manager.config.model_hyperparams
-            execution_config = config_manager.config.training_execution
+            model_config = config_manager.get_config().model_hyperparams
+            execution_config = config_manager.get_config().training_execution
             assert call_args[1]['learning_rate'] == model_config.learning_rate
             assert call_args[1]['gamma'] == model_config.gamma
             assert call_args[1]['device'] == execution_config.device
     
     def test_create_new_model_without_tensorboard_log(self, mock_env):
         """Test creating new model without tensorboard logging."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
             mock_model = Mock()
@@ -135,9 +138,9 @@ class TestNewModelCreation:
     
     def test_create_new_model_incomplete_config_manager(self, mock_env):
         """Test creating new model with incomplete ConfigManager."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         # Intentionally set a required value to None
-        config_manager.config.model_hyperparams.learning_rate = None
+        config_manager.get_config().model_hyperparams.learning_rate = None
         
         with pytest.raises(ValueError, match="ConfigManager.model_hyperparams.learning_rate is None"):
             create_new_model(env=mock_env, config_manager=config_manager)
@@ -279,7 +282,7 @@ class TestCreateModelUnified:
     
     def test_create_model_new_model(self, mock_env):
         """Test creating new model through unified interface."""
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.model_factory.create_new_model') as mock_create_new:
             mock_model = Mock()
@@ -304,7 +307,7 @@ class TestCreateModelUnified:
         checkpoint_path = os.path.join(temp_dir, "model.zip")
         Path(checkpoint_path).touch()
         
-        config_manager = ConfigManager()
+        config_manager = create_test_config_manager()
         
         with patch('src.factories.model_factory.load_model_from_checkpoint') as mock_load:
             with patch('src.factories.model_factory.load_vecnormalize_stats') as mock_load_stats:
@@ -325,7 +328,7 @@ class TestCreateModelUnified:
                 mock_load.assert_called_once_with(
                     checkpoint_path=checkpoint_path,
                     env=mock_updated_env,  # Should be updated env, not original
-                    device=config_manager.config.training_execution.device,
+                    device=config_manager.get_config().training_execution.device,
                     tensorboard_log=None
                 )
                 mock_load_stats.assert_called_once_with(
@@ -385,14 +388,14 @@ class TestIntegrationScenarios:
         mock_base_env, mock_vec_env, mock_normalized_env = mock_full_env_setup
         
         # Simulate train.py model creation with ConfigManager
-        config_manager = ConfigManager()
-        config_manager.config.model_hyperparams.learning_rate = 1e-4
-        config_manager.config.model_hyperparams.gamma = 0.99
-        config_manager.config.network_architecture.features_dim = 128
-        config_manager.config.network_architecture.pi_layers = [64, 64]
-        config_manager.config.network_architecture.vf_layers = [256, 256]
-        config_manager.config.training_execution.device = 'cpu'
-        config_manager.config.training_execution.seed = 42
+        config_manager = create_test_config_manager()
+        config_manager.get_config().model_hyperparams.learning_rate = 1e-4
+        config_manager.get_config().model_hyperparams.gamma = 0.99
+        config_manager.get_config().network_architecture.features_dim = 128
+        config_manager.get_config().network_architecture.pi_layers = [64, 64]
+        config_manager.get_config().network_architecture.vf_layers = [256, 256]
+        config_manager.get_config().training_execution.device = 'cpu'
+        config_manager.get_config().training_execution.seed = 42
         
         with patch('src.factories.model_factory.create_new_model') as mock_create_new:
             mock_model = Mock()
@@ -409,14 +412,14 @@ class TestIntegrationScenarios:
     
     def test_create_model_with_config_manager(self):
         """Test creating model through unified interface with ConfigManager."""
-        config_manager = ConfigManager()
-        config_manager.config.model_hyperparams.learning_rate = 2e-4
-        config_manager.config.model_hyperparams.gamma = 0.95
-        config_manager.config.network_architecture.features_dim = 256
-        config_manager.config.network_architecture.pi_layers = [128, 64]
-        config_manager.config.network_architecture.vf_layers = [512, 256]
-        config_manager.config.training_execution.device = 'cpu'
-        config_manager.config.training_execution.seed = 42
+        config_manager = create_test_config_manager()
+        config_manager.get_config().model_hyperparams.learning_rate = 2e-4
+        config_manager.get_config().model_hyperparams.gamma = 0.95
+        config_manager.get_config().network_architecture.features_dim = 256
+        config_manager.get_config().network_architecture.pi_layers = [128, 64]
+        config_manager.get_config().network_architecture.vf_layers = [512, 256]
+        config_manager.get_config().training_execution.device = 'cpu'
+        config_manager.get_config().training_execution.seed = 42
         
         mock_env = Mock()
         mock_env.observation_space = gym.spaces.Box(low=0, high=1, shape=(1, 5, 5))
@@ -441,8 +444,8 @@ class TestIntegrationScenarios:
         checkpoint_path = os.path.join(temp_dir, "model.zip")
         Path(checkpoint_path).touch()
         
-        config_manager = ConfigManager()
-        config_manager.config.training_execution.device = 'cpu'
+        config_manager = create_test_config_manager()
+        config_manager.get_config().training_execution.device = 'cpu'
         
         with patch('src.factories.model_factory.load_model_from_checkpoint') as mock_load:
             with patch('src.factories.model_factory.load_vecnormalize_stats') as mock_load_stats:

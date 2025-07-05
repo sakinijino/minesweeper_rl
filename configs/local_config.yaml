@@ -1,0 +1,40 @@
+# 本地测试配置 - 适用于快速测试和调试
+# 针对CPU资源和较短训练时间优化
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 512  # 适中的步数
+  batch_size: 128  # 适中的batch size
+  n_epochs: 4  # 更少的epochs快速测试
+
+network_architecture:
+  features_dim: 32
+  pi_layers: [32]
+  vf_layers: [32]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  max_reward_per_step: None
+
+training_execution:
+  total_timesteps: 10000  # 更短的训练时间
+  n_envs: 1  # 更少的并行环境
+  vec_env_type: "subproc"
+  checkpoint_freq: 1000
+  device: "auto"  # 自动选择设备
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
