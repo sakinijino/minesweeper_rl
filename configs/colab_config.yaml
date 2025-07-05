@@ -25,7 +25,6 @@ environment_config:
   reward_lose: -0.05
   reward_reveal: 0.1
   reward_invalid: -0.1
-  max_reward_per_step: None
 
 training_execution:
   total_timesteps: 1_000_000  # 更长的训练时间

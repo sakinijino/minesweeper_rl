@@ -44,9 +44,9 @@ class TestEnvConfig:
         assert 'max_reward_per_step' in config
         assert 'render_mode' in config
         
-        # All values should be non-None (ConfigManager must provide defaults)
+        # All values should be non-None except render_mode and max_reward_per_step
         for key, value in config.items():
-            if key != 'render_mode':  # render_mode can be None
+            if key not in ['render_mode', 'max_reward_per_step']:  # these can be None
                 assert value is not None, f"ConfigManager should provide non-None default for {key}"
     
     def test_create_env_config_with_render_mode(self):

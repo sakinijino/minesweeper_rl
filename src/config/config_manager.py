@@ -13,6 +13,7 @@ Supports YAML and JSON configuration files.
 import json
 import os
 import yaml
+import dataclasses
 from typing import Dict, Any, Optional, Union, List
 from dataclasses import asdict, fields
 from argparse import Namespace
@@ -193,7 +194,8 @@ class ConfigManager:
             
             section_dict = config_dict[section_name]
             for field in fields(section_class):
-                if field.name not in section_dict:
+                # Skip fields with default values (like max_reward_per_step)
+                if field.name not in section_dict and field.default == dataclasses.MISSING and field.default_factory == dataclasses.MISSING:
                     missing_params.append(f"Missing parameter: {section_name}.{field.name}")
         
         if missing_params:

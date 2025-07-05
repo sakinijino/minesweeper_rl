@@ -47,7 +47,7 @@ class EnvironmentConfig:
     reward_lose: float
     reward_reveal: float
     reward_invalid: float
-    max_reward_per_step: float
+    max_reward_per_step: Optional[float] = None
 
 
 @dataclass

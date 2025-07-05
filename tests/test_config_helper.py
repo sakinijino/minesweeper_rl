@@ -40,8 +40,7 @@ def create_test_config_manager():
             "reward_win": 10.0,
             "reward_lose": -10.0,
             "reward_reveal": 1.0,
-            "reward_invalid": -1.0,
-            "max_reward_per_step": 10.0
+            "reward_invalid": -1.0
         },
         "training_execution": {
             "total_timesteps": 100000,

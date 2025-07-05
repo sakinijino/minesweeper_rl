@@ -48,9 +48,9 @@ def create_env_config(
     
     env_config_obj = config_manager.config.environment_config
     
-    # Validate that ConfigManager has all required values
+    # Validate that ConfigManager has all required values (max_reward_per_step is optional)
     required_values = ['width', 'height', 'n_mines', 'reward_win', 'reward_lose', 
-                      'reward_reveal', 'reward_invalid', 'max_reward_per_step']
+                      'reward_reveal', 'reward_invalid']
     for attr in required_values:
         if getattr(env_config_obj, attr) is None:
             raise ValueError(f"ConfigManager.environment_config.{attr} is None. "
