@@ -142,13 +142,14 @@ class TestLoadTrainingConfig:
         config = load_training_config(config_path)
         
         assert config is not None
-        assert config["total_timesteps"] == 100000
-        assert config["n_envs"] == 4
-        assert config["learning_rate"] == 0.0001
-        assert config["width"] == 5
-        assert config["height"] == 5
-        assert config["n_mines"] == 3
-        assert config["seed"] == 42
+        # Check nested structure (new config format)
+        assert config["training_execution"]["total_timesteps"] == 100000
+        assert config["training_execution"]["n_envs"] == 4
+        assert config["model_hyperparams"]["learning_rate"] == 0.0001
+        assert config["environment_config"]["width"] == 5
+        assert config["environment_config"]["height"] == 5
+        assert config["environment_config"]["n_mines"] == 3
+        assert config["training_execution"]["seed"] == 42
     
     def test_load_training_config_nonexistent_file(self, temp_dir):
         """Test behavior with non-existent config file."""
@@ -221,7 +222,8 @@ class TestIntegrationScenarios:
         config_path = os.path.join(mock_training_run_dir, "training_config.json")
         config = load_training_config(config_path)
         assert config is not None
-        assert "total_timesteps" in config
+        assert "training_execution" in config
+        assert "total_timesteps" in config["training_execution"]
     
     def test_continue_from_specific_step_workflow(self, mock_training_run_dir):
         """Test workflow for continuing from specific step."""
