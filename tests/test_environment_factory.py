@@ -17,6 +17,10 @@ from src.factories.environment_factory import (
     EnvironmentCreationError
 )
 
+# Import new configuration system for testing
+from src.config.config_manager import ConfigManager
+from src.config.config_schemas import EnvironmentConfig
+
 
 class TestEnvConfig:
     """Test environment configuration creation."""
@@ -125,6 +129,23 @@ class TestBaseEnvironment:
             mock_env_class.assert_called_once()
             call_kwargs = mock_env_class.call_args[1]
             assert call_kwargs['render_mode'] == 'human'
+    
+    def test_create_env_config_from_config_manager(self):
+        """Test creating environment config from ConfigManager."""
+        config_manager = ConfigManager()
+        config_manager.config.environment_config.width = 10
+        config_manager.config.environment_config.height = 8
+        config_manager.config.environment_config.n_mines = 15
+        config_manager.config.environment_config.reward_win = 100.0
+        
+        # Test the new interface we'll add
+        config = create_env_config(config_manager=config_manager, render_mode='human')
+        
+        assert config['width'] == 10
+        assert config['height'] == 8
+        assert config['n_mines'] == 15
+        assert config['reward_win'] == 100.0
+        assert config['render_mode'] == 'human'
     
     def test_create_base_environment_error_handling(self):
         """Test error handling in base environment creation."""
@@ -360,6 +381,37 @@ class TestTrainingEnvironment:
                         stats_path, 
                         training_mode=True
                     )
+    
+    def test_create_training_environment_with_config_manager(self):
+        """Test creating training environment with ConfigManager."""
+        config_manager = ConfigManager()
+        config_manager.config.environment_config.width = 8
+        config_manager.config.environment_config.height = 8
+        config_manager.config.environment_config.n_mines = 12
+        config_manager.config.training_execution.n_envs = 2
+        config_manager.config.training_execution.vec_env_type = 'dummy'
+        config_manager.config.training_execution.seed = 123
+        config_manager.config.model_hyperparams.gamma = 0.95
+        
+        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
+            with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
+                mock_vec_env = Mock()
+                mock_normalized_env = Mock()
+                mock_create_vec.return_value = mock_vec_env
+                mock_vecnorm.return_value = mock_normalized_env
+                
+                # Test the new interface we'll add
+                env = create_training_environment(config_manager=config_manager)
+                
+                assert env == mock_normalized_env
+                mock_create_vec.assert_called_once()
+                mock_vecnorm.assert_called_once_with(
+                    mock_vec_env,
+                    norm_obs=False,
+                    norm_reward=True,
+                    clip_obs=10.0,
+                    gamma=0.95
+                )
 
 
 class TestInferenceEnvironment:

@@ -14,7 +14,8 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNorm
 from stable_baselines3.common.utils import set_random_seed
 
 from ..env.minesweeper_env import MinesweeperEnv
-from ..utils import config
+from ..config.config_manager import ConfigManager
+from ..config.config_schemas import EnvironmentConfig
 
 
 class EnvironmentCreationError(Exception):
@@ -35,7 +36,8 @@ def create_env_config(
     reward_invalid: Optional[float] = None,
     max_reward_per_step: Optional[float] = None,
     render_mode: Optional[str] = None,
-    args: Optional[Any] = None
+    args: Optional[Any] = None,
+    config_manager: Optional[ConfigManager] = None
 ) -> Dict[str, Any]:
     """
     Create environment configuration dictionary.
@@ -50,34 +52,61 @@ def create_env_config(
         reward_invalid: Penalty for clicking revealed cells
         max_reward_per_step: Maximum reward in one step
         render_mode: Rendering mode ('human', 'rgb_array', None)
-        args: Arguments object to extract values from
+        args: Arguments object to extract values from (legacy)
+        config_manager: ConfigManager instance for configuration
         
     Returns:
         Dictionary containing environment configuration
     """
+    # Determine default values from ConfigManager if provided, otherwise use defaults
+    if config_manager is not None:
+        env_config_obj = config_manager.get_environment_config()
+        defaults = {
+            'width': env_config_obj.width,
+            'height': env_config_obj.height,
+            'n_mines': env_config_obj.n_mines,
+            'reward_win': env_config_obj.reward_win,
+            'reward_lose': env_config_obj.reward_lose,
+            'reward_reveal': env_config_obj.reward_reveal,
+            'reward_invalid': env_config_obj.reward_invalid,
+            'max_reward_per_step': env_config_obj.max_reward_per_step,
+        }
+    else:
+        # Fallback defaults for compatibility
+        defaults = {
+            'width': 16,
+            'height': 16,
+            'n_mines': 40,
+            'reward_win': 10.0,
+            'reward_lose': -10.0,
+            'reward_reveal': 1.0,
+            'reward_invalid': -1.0,
+            'max_reward_per_step': 10.0,
+        }
+    
     # Use args object if provided, otherwise use explicit parameters or defaults
     if args is not None:
         env_config = {
-            'width': getattr(args, 'width', config.WIDTH),
-            'height': getattr(args, 'height', config.HEIGHT),
-            'n_mines': getattr(args, 'n_mines', config.N_MINES),
-            'reward_win': getattr(args, 'reward_win', config.REWARD_WIN),
-            'reward_lose': getattr(args, 'reward_lose', config.REWARD_LOSE),
-            'reward_reveal': getattr(args, 'reward_reveal', config.REWARD_REVEAL),
-            'reward_invalid': getattr(args, 'reward_invalid', config.REWARD_INVALID),
-            'max_reward_per_step': getattr(args, 'max_reward_per_step', config.MAX_REWARD_PER_STEP),
+            'width': getattr(args, 'width', defaults['width']),
+            'height': getattr(args, 'height', defaults['height']),
+            'n_mines': getattr(args, 'n_mines', defaults['n_mines']),
+            'reward_win': getattr(args, 'reward_win', defaults['reward_win']),
+            'reward_lose': getattr(args, 'reward_lose', defaults['reward_lose']),
+            'reward_reveal': getattr(args, 'reward_reveal', defaults['reward_reveal']),
+            'reward_invalid': getattr(args, 'reward_invalid', defaults['reward_invalid']),
+            'max_reward_per_step': getattr(args, 'max_reward_per_step', defaults['max_reward_per_step']),
             'render_mode': render_mode
         }
     else:
         env_config = {
-            'width': width if width is not None else config.WIDTH,
-            'height': height if height is not None else config.HEIGHT,
-            'n_mines': n_mines if n_mines is not None else config.N_MINES,
-            'reward_win': reward_win if reward_win is not None else config.REWARD_WIN,
-            'reward_lose': reward_lose if reward_lose is not None else config.REWARD_LOSE,
-            'reward_reveal': reward_reveal if reward_reveal is not None else config.REWARD_REVEAL,
-            'reward_invalid': reward_invalid if reward_invalid is not None else config.REWARD_INVALID,
-            'max_reward_per_step': max_reward_per_step if max_reward_per_step is not None else config.MAX_REWARD_PER_STEP,
+            'width': width if width is not None else defaults['width'],
+            'height': height if height is not None else defaults['height'],
+            'n_mines': n_mines if n_mines is not None else defaults['n_mines'],
+            'reward_win': reward_win if reward_win is not None else defaults['reward_win'],
+            'reward_lose': reward_lose if reward_lose is not None else defaults['reward_lose'],
+            'reward_reveal': reward_reveal if reward_reveal is not None else defaults['reward_reveal'],
+            'reward_invalid': reward_invalid if reward_invalid is not None else defaults['reward_invalid'],
+            'max_reward_per_step': max_reward_per_step if max_reward_per_step is not None else defaults['max_reward_per_step'],
             'render_mode': render_mode
         }
     
@@ -182,15 +211,17 @@ def load_vecnormalize_stats(
 
 
 def create_training_environment(
-    args: Any,
-    vecnormalize_stats_path: Optional[str] = None
+    args: Optional[Any] = None,
+    vecnormalize_stats_path: Optional[str] = None,
+    config_manager: Optional[ConfigManager] = None
 ) -> Any:
     """
     Create a training environment with VecNormalize.
     
     Args:
-        args: Arguments object containing environment configuration
+        args: Arguments object containing environment configuration (legacy)
         vecnormalize_stats_path: Path to VecNormalize stats file (optional)
+        config_manager: ConfigManager instance for configuration (preferred)
         
     Returns:
         VecNormalize environment ready for training
@@ -199,19 +230,37 @@ def create_training_environment(
         EnvironmentCreationError: If environment creation fails
     """
     try:
+        # Ensure we have either args or config_manager
+        if args is None and config_manager is None:
+            raise EnvironmentCreationError("Either args or config_manager must be provided")
+        
         # Create environment configuration
-        env_config = create_env_config(args=args, render_mode=None)
+        env_config = create_env_config(args=args, render_mode=None, config_manager=config_manager)
         
         # Create environment function
         def create_env():
             return create_base_environment(env_config)
         
+        # Get training parameters
+        if config_manager is not None:
+            training_config = config_manager.config.training_execution
+            n_envs = training_config.n_envs
+            vec_env_type = training_config.vec_env_type
+            seed = training_config.seed
+            gamma = config_manager.config.model_hyperparams.gamma
+        else:
+            # Legacy args interface
+            n_envs = args.n_envs
+            vec_env_type = args.vec_env_type
+            seed = args.seed
+            gamma = args.gamma
+        
         # Create vectorized environment
         vec_env = create_vectorized_environment(
             env_fn=create_env,
-            n_envs=args.n_envs,
-            vec_env_type=args.vec_env_type,
-            seed=args.seed
+            n_envs=n_envs,
+            vec_env_type=vec_env_type,
+            seed=seed
         )
         
         # Apply VecNormalize for training
@@ -221,7 +270,7 @@ def create_training_environment(
             norm_obs=False,
             norm_reward=True,
             clip_obs=10.0,
-            gamma=args.gamma
+            gamma=gamma
         )
         
         # Load existing stats if provided
@@ -242,17 +291,19 @@ def create_training_environment(
 
 
 def create_inference_environment(
-    args: Any,
+    args: Optional[Any] = None,
     mode: str = 'batch',
-    vecnormalize_stats_path: Optional[str] = None
+    vecnormalize_stats_path: Optional[str] = None,
+    config_manager: Optional[ConfigManager] = None
 ) -> Tuple[Any, Optional[Any]]:
     """
     Create an inference environment.
     
     Args:
-        args: Arguments object containing environment configuration
+        args: Arguments object containing environment configuration (legacy)
         mode: Inference mode ('batch' for no rendering, 'interactive' for human rendering)
         vecnormalize_stats_path: Path to VecNormalize stats file (optional)
+        config_manager: ConfigManager instance for configuration (preferred)
         
     Returns:
         Tuple of (vectorized_environment, raw_environment)
@@ -262,10 +313,14 @@ def create_inference_environment(
         EnvironmentCreationError: If environment creation fails
     """
     try:
+        # Ensure we have either args or config_manager
+        if args is None and config_manager is None:
+            raise EnvironmentCreationError("Either args or config_manager must be provided")
+        
         if mode == 'interactive':
             # For interactive mode, create both raw and vectorized environments
             render_mode = 'human'
-            env_config = create_env_config(args=args, render_mode=render_mode)
+            env_config = create_env_config(args=args, render_mode=render_mode, config_manager=config_manager)
             
             # Create raw environment for direct access (e.g., cell_size, mouse clicks)
             raw_env = create_base_environment(env_config)
@@ -275,25 +330,37 @@ def create_inference_environment(
             
         else:
             # For batch mode, only need vectorized environment
-            env_config = create_env_config(args=args, render_mode=None)
+            env_config = create_env_config(args=args, render_mode=None, config_manager=config_manager)
             
             def create_env():
                 return create_base_environment(env_config)
+            
+            # Get seed from config_manager or args
+            if config_manager is not None:
+                seed = config_manager.config.training_execution.seed
+            else:
+                seed = args.seed
             
             # Use DummyVecEnv with single environment for inference
             vec_env = create_vectorized_environment(
                 env_fn=create_env,
                 n_envs=1,
                 vec_env_type='dummy',
-                seed=args.seed
+                seed=seed
             )
             
             raw_env = None
         
         # Set random seed if specified
-        if args.seed is not None:
-            set_random_seed(args.seed)
-            vec_env.seed(args.seed)
+        seed = None
+        if config_manager is not None:
+            seed = config_manager.config.training_execution.seed
+        elif args is not None:
+            seed = args.seed
+        
+        if seed is not None:
+            set_random_seed(seed)
+            vec_env.seed(seed)
         
         # Load VecNormalize stats if provided
         if vecnormalize_stats_path:
@@ -315,13 +382,18 @@ def create_inference_environment(
 
 # Convenience functions for specific use cases
 
-def create_batch_environment(args: Any, vecnormalize_stats_path: Optional[str] = None) -> Any:
+def create_batch_environment(
+    args: Optional[Any] = None, 
+    vecnormalize_stats_path: Optional[str] = None,
+    config_manager: Optional[ConfigManager] = None
+) -> Any:
     """
     Convenience function for creating batch inference environments.
     
     Args:
-        args: Arguments object containing environment configuration
+        args: Arguments object containing environment configuration (legacy)
         vecnormalize_stats_path: Path to VecNormalize stats file (optional)
+        config_manager: ConfigManager instance for configuration (preferred)
         
     Returns:
         Vectorized environment ready for batch inference
@@ -329,18 +401,24 @@ def create_batch_environment(args: Any, vecnormalize_stats_path: Optional[str] =
     env, _ = create_inference_environment(
         args=args,
         mode='batch',
-        vecnormalize_stats_path=vecnormalize_stats_path
+        vecnormalize_stats_path=vecnormalize_stats_path,
+        config_manager=config_manager
     )
     return env
 
 
-def create_interactive_environment(args: Any, vecnormalize_stats_path: Optional[str] = None) -> Tuple[Any, Any]:
+def create_interactive_environment(
+    args: Optional[Any] = None, 
+    vecnormalize_stats_path: Optional[str] = None,
+    config_manager: Optional[ConfigManager] = None
+) -> Tuple[Any, Any]:
     """
     Convenience function for creating interactive environments.
     
     Args:
-        args: Arguments object containing environment configuration
+        args: Arguments object containing environment configuration (legacy)
         vecnormalize_stats_path: Path to VecNormalize stats file (optional)
+        config_manager: ConfigManager instance for configuration (preferred)
         
     Returns:
         Tuple of (vectorized_environment, raw_environment)
@@ -348,22 +426,28 @@ def create_interactive_environment(args: Any, vecnormalize_stats_path: Optional[
     return create_inference_environment(
         args=args,
         mode='interactive',
-        vecnormalize_stats_path=vecnormalize_stats_path
+        vecnormalize_stats_path=vecnormalize_stats_path,
+        config_manager=config_manager
     )
 
 
-def create_human_environment(args: Any, vecnormalize_stats_path: Optional[str] = None) -> Tuple[Any, Any]:
+def create_human_environment(
+    args: Optional[Any] = None, 
+    vecnormalize_stats_path: Optional[str] = None,
+    config_manager: Optional[ConfigManager] = None
+) -> Tuple[Any, Any]:
     """
     Convenience function for creating human play environments.
     
     Args:
-        args: Arguments object containing environment configuration
+        args: Arguments object containing environment configuration (legacy)
         vecnormalize_stats_path: Path to VecNormalize stats file (optional)
+        config_manager: ConfigManager instance for configuration (preferred)
         
     Returns:
         Tuple of (vectorized_environment, raw_environment) for human interaction
     """
-    vec_env, raw_env = create_interactive_environment(args, vecnormalize_stats_path)
+    vec_env, raw_env = create_interactive_environment(args, vecnormalize_stats_path, config_manager)
     
     # For human mode, we might want to handle VecNormalize differently
     # Load stats but ensure proper settings for human play

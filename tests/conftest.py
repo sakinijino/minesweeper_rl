@@ -60,13 +60,19 @@ def mock_training_run_dir(temp_dir):
     
     # Create training config
     config = {
-        "total_timesteps": 100000,
-        "n_envs": 4,
-        "learning_rate": 0.0001,
-        "width": 5,
-        "height": 5,
-        "n_mines": 3,
-        "seed": 42
+        "model_hyperparams": {
+            "learning_rate": 0.0001
+        },
+        "environment_config": {
+            "width": 5,
+            "height": 5,
+            "n_mines": 3
+        },
+        "training_execution": {
+            "total_timesteps": 100000,
+            "n_envs": 4,
+            "seed": 42
+        }
     }
     
     config_path = os.path.join(run_dir, "training_config.json")

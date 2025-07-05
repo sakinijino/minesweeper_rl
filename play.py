@@ -1,4 +1,4 @@
-# play.py
+# play_new.py - Refactored play script with new configuration system
 import os
 import gymnasium as gym
 import pygame
@@ -10,41 +10,197 @@ from sb3_contrib import MaskablePPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
 
-# 导入你的环境类
+# Import environment classes
 from src.env.minesweeper_env import MinesweeperEnv
-# 导入 config 来获取默认值
-from src.utils import config
-# 导入 checkpoint 相关工具函数
+
+# Legacy config import removed - now using new configuration system
 from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
-# 导入模型工厂
+
+# Import model and environment factories
 from src.factories.model_factory import create_inference_model
-# 导入环境工厂
 from src.factories.environment_factory import create_inference_environment
 
+# Import new configuration system
+from src.config.config_manager import ConfigManager
+from src.config.config_schemas import PlayConfig, EnvironmentConfig
 
-# ===== 游戏模式相关辅助函数 =====
 
-def create_environment(args, render_mode=None, vecnormalize_stats_path=None):
+def setup_argument_parser():
     """
-    创建 Minesweeper 环境实例（使用环境工厂）。
+    Setup and return configured argument parser with new configuration system.
+    
+    Returns:
+        ArgumentParser: Configured argument parser
+    """
+    parser = argparse.ArgumentParser(description="Play Minesweeper in different modes with new config system.")
+
+    # Core play arguments
+    parser.add_argument("--mode", type=str, required=True, 
+                        choices=["agent", "batch", "human"], 
+                        help="Play mode: agent (AI with visualization), batch (AI without visualization), human (human player)")
+    
+    # Model and configuration loading
+    parser.add_argument("--training_run_dir", type=str, default=None, 
+                        help="Directory to training run (will auto-load config and find best checkpoint)")
+    parser.add_argument("--config", type=str, default=None, 
+                        help="Path to configuration file (JSON format)")
+    parser.add_argument("--checkpoint_steps", type=int, default=None, 
+                        help="Specific checkpoint step to load (uses latest if not specified)")
+
+    # Play execution parameters
+    parser.add_argument("--num_episodes", type=int, default=None, 
+                        help="Number of episodes to run in batch mode")
+    parser.add_argument("--delay", type=float, default=None, 
+                        help="Delay (in seconds) between agent moves in interactive mode")
+    parser.add_argument("--device", type=str, default=None, 
+                        choices=["auto", "cpu", "cuda"], 
+                        help="Device to use for loading the model")
+    parser.add_argument("--seed", type=int, default=None, 
+                        help="Random seed for environment reset")
+
+    # Environment parameters (can override loaded config)
+    parser.add_argument("--width", type=int, default=None, 
+                        help="Width of the Minesweeper grid")
+    parser.add_argument("--height", type=int, default=None, 
+                        help="Height of the Minesweeper grid")
+    parser.add_argument("--n_mines", type=int, default=None, 
+                        help="Number of mines in the grid")
+    parser.add_argument("--reward_win", type=float, default=None, 
+                        help="Reward for winning the game")
+    parser.add_argument("--reward_lose", type=float, default=None, 
+                        help="Penalty for hitting a mine")
+    parser.add_argument("--reward_reveal", type=float, default=None, 
+                        help="Reward for revealing a safe cell")
+    parser.add_argument("--reward_invalid", type=float, default=None, 
+                        help="Penalty for clicking revealed cells")
+    parser.add_argument("--max_reward_per_step", type=float, default=None, 
+                        help="Maximum reward in one step")
+
+    return parser
+
+
+def load_and_setup_play_config(args):
+    """
+    Load and setup play configuration based on arguments.
     
     Args:
-        args: 命令行参数
-        render_mode: 渲染模式 ('human', None, 'rgb_array')
-        vecnormalize_stats_path: VecNormalize统计文件路径
+        args: Parsed command line arguments
         
     Returns:
-        配置好的环境实例
+        Tuple[ConfigManager, str, str]: (config_manager, model_path, stats_path)
     """
-    # 确定模式
+    config_manager = ConfigManager()
+    model_path = None
+    stats_path = None
+    
+    # Load configuration from training run if specified
+    if args.training_run_dir:
+        try:
+            # Load training configuration
+            config_manager.load_from_training_run(args.training_run_dir)
+            print(f"Loaded configuration from training run: {args.training_run_dir}")
+            
+            # Find model and stats paths
+            model_path, stats_path = resolve_model_paths_from_run_dir(args.training_run_dir, args.checkpoint_steps)
+            
+        except FileNotFoundError:
+            print(f"Warning: No training config found in {args.training_run_dir}")
+            # Still try to find model paths
+            try:
+                model_path, stats_path = resolve_model_paths_from_run_dir(args.training_run_dir, args.checkpoint_steps)
+            except Exception as e:
+                print(f"Error: Could not find model files: {e}")
+                exit(1)
+    
+    # Load configuration file if specified
+    elif args.config:
+        try:
+            config_manager.load_from_file(args.config)
+            print(f"Loaded configuration from file: {args.config}")
+        except Exception as e:
+            print(f"Error loading configuration file: {e}")
+            exit(1)
+    
+    # Create play configuration
+    if config_manager.config.play_config is None:
+        config_manager.config.play_config = PlayConfig(
+            environment_config=config_manager.config.environment_config
+        )
+    
+    # Update play configuration with command line arguments
+    config_manager.update_from_args(args)
+    
+    # Set play mode and episodes
+    if args.mode:
+        config_manager.config.play_config.mode = args.mode
+    if args.num_episodes is not None:
+        config_manager.config.play_config.num_episodes = args.num_episodes
+    if args.delay is not None:
+        config_manager.config.play_config.delay = args.delay
+    if args.checkpoint_steps is not None:
+        config_manager.config.play_config.checkpoint_steps = args.checkpoint_steps
+    
+    return config_manager, model_path, stats_path
+
+
+def resolve_model_paths_from_run_dir(run_dir, checkpoint_steps=None):
+    """
+    Resolve model and stats paths from training run directory.
+    
+    Args:
+        run_dir: Training run directory
+        checkpoint_steps: Specific checkpoint steps (optional)
+        
+    Returns:
+        Tuple[str, str]: (model_path, stats_path)
+    """
+    try:
+        # Check if run_dir is a training run directory (contains models/ subdirectory)
+        models_dir = os.path.join(run_dir, "models")
+        if os.path.exists(models_dir):
+            checkpoint_dir = models_dir
+        else:
+            # Assume run_dir is already the models directory
+            checkpoint_dir = run_dir
+        
+        # Find the best checkpoint
+        best_checkpoint = find_best_checkpoint(checkpoint_dir, checkpoint_steps)
+        print(f"Selected checkpoint: {os.path.basename(best_checkpoint)}")
+        
+        # Find corresponding VecNormalize stats file
+        stats_path = find_vecnormalize_stats(best_checkpoint)
+        if stats_path:
+            print(f"Found VecNormalize stats: {os.path.basename(stats_path)}")
+        else:
+            print("Warning: No VecNormalize stats file found, using unnormalized environment")
+        
+        return best_checkpoint, stats_path
+        
+    except Exception as e:
+        raise Exception(f"Could not resolve model paths from {run_dir}: {e}")
+
+
+def create_environment_from_config(config_manager, render_mode=None, vecnormalize_stats_path=None):
+    """
+    Create environment from configuration.
+    
+    Args:
+        config_manager: Configuration manager instance
+        render_mode: Render mode ('human', None, 'rgb_array')
+        vecnormalize_stats_path: VecNormalize stats file path
+        
+    Returns:
+        Tuple[env, raw_env]: Environment instances
+    """
+    # Determine mode
     if render_mode == 'human':
         mode = 'interactive'
     else:
         mode = 'batch'
     
-    # 使用环境工厂创建推理环境
+    # Use environment factory with ConfigManager directly (no need for args conversion)
     env, raw_env = create_inference_environment(
-        args, 
+        config_manager=config_manager,
         mode=mode,
         vecnormalize_stats_path=vecnormalize_stats_path
     )
@@ -52,44 +208,41 @@ def create_environment(args, render_mode=None, vecnormalize_stats_path=None):
     return env, raw_env
 
 
-def setup_random_seed(args, env):
-    """设置随机种子"""
-    if args.seed is not None:
-        set_random_seed(args.seed)
-        env.seed(args.seed)
-        print(f"Using random seed: {args.seed}")
-
-
-def load_model_and_environment(args, env):
+def load_model_and_environment(config_manager, env, model_path, stats_path):
     """
-    加载模型和环境统计数据。
+    Load model and environment for inference.
     
     Args:
-        args: 命令行参数
-        env: 环境实例
+        config_manager: Configuration manager instance
+        env: Environment instance
+        model_path: Path to model file
+        stats_path: Path to VecNormalize stats file
         
     Returns:
-        Tuple[model, updated_env] 或 (None, env) 如果不需要模型
+        Tuple[model, updated_env] or (None, env) if no model needed
     """
-    model_path = args.model_path
-    stats_path = args.stats_path
-    
     if not model_path or not os.path.exists(model_path):
-        print(f"Error: Model path not found: {model_path}")
+        if model_path:
+            print(f"Error: Model path not found: {model_path}")
         return None, env
 
     print(f"Loading model: {model_path}")
+    
+    # Get device from play config or training config
+    device = "cpu"  # Default device for play
+    if hasattr(config_manager.config, 'training_execution') and config_manager.config.training_execution.device:
+        device = config_manager.config.training_execution.device
     
     try:
         model, env = create_inference_model(
             env=env,
             checkpoint_path=model_path,
             vecnormalize_stats_path=stats_path,
-            device=args.device
+            device=device
         )
         print(f"Model loaded on device: {model.device}")
         
-        # 设置 VecNormalize 为评估模式
+        # Set VecNormalize to evaluation mode
         if hasattr(env, 'training'):
             env.training = False
             env.norm_reward = False
@@ -102,8 +255,22 @@ def load_model_and_environment(args, env):
         return None, env
 
 
+def setup_random_seed(config_manager, env):
+    """Setup random seed from configuration."""
+    seed = None
+    if config_manager.config.play_config and hasattr(config_manager.config.play_config, 'seed'):
+        seed = config_manager.config.play_config.seed
+    elif config_manager.config.training_execution.seed:
+        seed = config_manager.config.training_execution.seed
+    
+    if seed is not None:
+        set_random_seed(seed)
+        env.seed(seed)
+        print(f"Using random seed: {seed}")
+
+
 def print_final_statistics(total_games, wins, player_type):
-    """打印最终统计信息"""
+    """Print final statistics."""
     win_rate = (wins / total_games * 100) if total_games > 0 else 0
     print(f"\n--- Final {player_type} Mode Statistics ---")
     print(f"Total Games Played: {total_games}")
@@ -112,35 +279,39 @@ def print_final_statistics(total_games, wins, player_type):
 
 
 def print_episode_result(episode, total_episodes, episode_steps, episode_reward, won_episode):
-    """打印单局游戏结果"""
+    """Print single episode result."""
     status = "Win" if won_episode else "Lose"
     print(f"Episode {episode + 1}/{total_episodes} finished - "
           f"Steps: {episode_steps}, Reward: {episode_reward:.2f}, Result: {status}")
 
 
-# ===== 游戏模式函数 =====
-
-def run_batch_mode(args):
+def run_batch_mode(config_manager, model_path, stats_path):
     """
-    批量模式：智能体在无界面环境中进行多局游戏测试。
-    """
-    print(f"--- Running Batch Mode ({args.num_episodes} episodes) ---")
-
-    # 创建环境（无渲染）
-    env, _ = create_environment(args, render_mode=None, vecnormalize_stats_path=args.stats_path)
-    setup_random_seed(args, env)
+    Batch mode: Agent runs multiple games without visualization.
     
-    # 加载模型
-    model, env = load_model_and_environment(args, env)
+    Args:
+        config_manager: Configuration manager instance
+        model_path: Path to model file
+        stats_path: Path to VecNormalize stats file
+    """
+    play_config = config_manager.get_play_config()
+    print(f"--- Running Batch Mode ({play_config.num_episodes} episodes) ---")
+
+    # Create environment (no rendering)
+    env, _ = create_environment_from_config(config_manager, render_mode=None, vecnormalize_stats_path=stats_path)
+    setup_random_seed(config_manager, env)
+    
+    # Load model
+    model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
     if model is None:
         env.close()
         return
 
-    # 批量游戏循环
+    # Batch game loop
     total_games = 0
     wins = 0
 
-    for episode in range(args.num_episodes):
+    for episode in range(play_config.num_episodes):
         obs = env.reset()
         terminated = False
         truncated = False
@@ -149,11 +320,11 @@ def run_batch_mode(args):
         won_episode = False
 
         while not terminated and not truncated:
-            # 获取动作掩码并预测动作
+            # Get action masks and predict action
             action_masks = env.env_method("action_masks")[0]
             action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
 
-            # 执行动作
+            # Execute action
             obs, reward, terminated_arr, info_arr = env.step(action)
             terminated = terminated_arr[0]
             actual_info = info_arr[0]
@@ -164,32 +335,35 @@ def run_batch_mode(args):
             episode_reward += reward
             episode_steps += 1
 
-        # 统计结果
+        # Statistics
         total_games += 1
         if won_episode:
             wins += 1
 
-        print_episode_result(episode, args.num_episodes, episode_steps, episode_reward, won_episode)
+        print_episode_result(episode, play_config.num_episodes, episode_steps, episode_reward, won_episode)
 
-    # 打印最终统计
+    # Print final statistics
     print_final_statistics(total_games, wins, "Agent")
     env.close()
 
 
-def run_human_mode(args):
+def run_human_mode(config_manager, stats_path):
     """
-    人类模式：人类玩家通过鼠标点击进行游戏。
+    Human mode: Human player plays through mouse clicks.
+    
+    Args:
+        config_manager: Configuration manager instance
+        stats_path: Path to VecNormalize stats file
     """
     print("--- Running Human Mode ---")
 
-    # 创建环境（有渲染）
-    env, env_instance = create_environment(args, render_mode='human', vecnormalize_stats_path=args.stats_path)
-    setup_random_seed(args, env)
+    # Create environment (with rendering)
+    env, env_instance = create_environment_from_config(config_manager, render_mode='human', vecnormalize_stats_path=stats_path)
+    setup_random_seed(config_manager, env)
     
-    # 人类模式不需要加载模型，但需要处理 VecNormalize
-    # VecNormalize 统计已经在环境工厂中处理了（如果提供了 stats_path）
+    # Human mode doesn't need a model, but VecNormalize stats are handled in environment factory
 
-    # 游戏统计
+    # Game statistics
     total_games = 0
     player_wins = 0
 
@@ -205,13 +379,13 @@ def run_human_mode(args):
         while running:
             action = None
 
-            # 处理 Pygame 事件
+            # Handle Pygame events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                     break
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # 人类点击输入
+                    # Human click input
                     x, y = event.pos
                     col = x // env_instance.cell_size
                     row = y // env_instance.cell_size
@@ -226,7 +400,7 @@ def run_human_mode(args):
             if not running:
                 break
 
-            # 执行动作（如果有）
+            # Execute action (if any)
             if action is not None:
                 obs, reward, terminated_arr, info_arr = env.step(action)
                 terminated = terminated_arr[0]
@@ -240,7 +414,7 @@ def run_human_mode(args):
                 
                 print(f"Step: {step_count}, Action: {action[0]}, Reward: {reward:.2f}, Done: {terminated}")
 
-                # 检查游戏结束
+                # Check game end
                 if terminated or truncated:
                     total_games += 1
                     if current_game_won:
@@ -256,7 +430,7 @@ def run_human_mode(args):
                     current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
                     print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
 
-                    time.sleep(2)  # 暂停显示结果
+                    time.sleep(2)  # Pause to display results
                     print("Resetting environment...")
                     obs = env.reset()
                     total_reward = 0
@@ -265,7 +439,7 @@ def run_human_mode(args):
                     truncated = False
                     current_game_won = False
             else:
-                # 没有动作时仍需渲染以保持窗口更新
+                # No action, still need to render to keep window updated
                 env_instance._render_frame()
 
     except KeyboardInterrupt:
@@ -276,25 +450,32 @@ def run_human_mode(args):
         print("Environment closed. Game exited.")
 
 
-def run_agent_mode(args):
+def run_agent_mode(config_manager, model_path, stats_path):
     """
-    智能体演示模式：智能体在有界面环境中进行游戏演示。
+    Agent demonstration mode: Agent plays with visualization.
+    
+    Args:
+        config_manager: Configuration manager instance
+        model_path: Path to model file
+        stats_path: Path to VecNormalize stats file
     """
     print("--- Running Agent Mode ---")
 
-    # 创建环境（有渲染）
-    env, env_instance = create_environment(args, render_mode='human', vecnormalize_stats_path=args.stats_path)
-    setup_random_seed(args, env)
+    # Create environment (with rendering)
+    env, env_instance = create_environment_from_config(config_manager, render_mode='human', vecnormalize_stats_path=stats_path)
+    setup_random_seed(config_manager, env)
     
-    # 加载模型
-    model, env = load_model_and_environment(args, env)
+    # Load model
+    model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
     if model is None:
         env.close()
         return
 
-    # 游戏统计
+    # Game statistics
     total_games = 0
     agent_wins = 0
+    
+    play_config = config_manager.get_play_config()
 
     try:
         obs = env.reset()
@@ -306,7 +487,7 @@ def run_agent_mode(args):
 
         running = True
         while running:
-            # 处理 Pygame 事件（主要是退出事件）
+            # Handle Pygame events (mainly quit events)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -320,14 +501,14 @@ def run_agent_mode(args):
             if not running:
                 break
 
-            # 智能体决策
+            # Agent decision
             action_masks = env.env_method("action_masks")[0]
             action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
             
             print(f"Agent action: {action}")
-            time.sleep(args.delay)  # 延迟以便观察
+            time.sleep(play_config.delay)  # Delay for observation
 
-            # 执行动作
+            # Execute action
             obs, reward, terminated_arr, info_arr = env.step(action)
             terminated = terminated_arr[0]
             actual_info = info_arr[0]
@@ -340,7 +521,7 @@ def run_agent_mode(args):
             
             print(f"Step: {step_count}, Action: {action[0]}, Reward: {reward:.2f}, Done: {terminated}")
 
-            # 检查游戏结束
+            # Check game end
             if terminated or truncated:
                 total_games += 1
                 if current_game_won:
@@ -356,7 +537,7 @@ def run_agent_mode(args):
                 current_win_rate = (agent_wins / total_games * 100) if total_games > 0 else 0
                 print(f"--- Stats so far --- Games: {total_games}, Wins: {agent_wins}, Win Rate: {current_win_rate:.2f}% ---")
 
-                time.sleep(2)  # 暂停显示结果
+                time.sleep(2)  # Pause to display results
                 print("Resetting environment...")
                 obs = env.reset()
                 total_reward = 0
@@ -373,142 +554,56 @@ def run_agent_mode(args):
         print("Environment closed. Game exited.")
 
 
-# ===== 辅助函数 =====
-
-def setup_argument_parser():
-    """
-    设置并返回配置好的参数解析器。
-    
-    Returns:
-        ArgumentParser: 配置好的参数解析器
-    """
-    parser = argparse.ArgumentParser(description="Play Minesweeper in different modes.")
-
-    # --- 模式选择 (必填参数) ---
-    parser.add_argument("--mode", type=str, required=True, 
-                        choices=["agent", "batch", "human"], 
-                        help="Play mode: agent (AI with visualization), batch (AI without visualization), human (human player)")
-    parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run in batch mode.")
-
-    # --- 路径和命名 ---
-    parser.add_argument("--training_run_dir", type=str, default=config.EXPERIMENT_BASE_DIR, 
-                        help="Directory to training dir of save models and stats")
-    parser.add_argument("--checkpoint_steps", type=int, default=None, 
-                        help="Specific checkpoint step to load (uses latest if not specified)")
-
-    # --- 环境参数 ---
-    parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
-    parser.add_argument("--height", type=int, default=config.HEIGHT, help="Height of the Minesweeper grid")
-    parser.add_argument("--n_mines", type=int, default=config.N_MINES, help="Number of mines in the grid")
-    parser.add_argument("--reward_win", type=float, default=config.REWARD_WIN, help="Reward for winning the game")
-    parser.add_argument("--reward_lose", type=float, default=config.REWARD_LOSE, help="Penalty for hitting a mine")
-    parser.add_argument("--reward_reveal", type=float, default=config.REWARD_REVEAL, help="Reward for revealing a safe cell")
-    parser.add_argument("--reward_invalid", type=float, default=config.REWARD_INVALID, help="Penalty for clicking revealed cells")
-    parser.add_argument("--max_reward_per_step", type=float, default=config.MAX_REWARD_PER_STEP, help="Maximum reward in one step")
-
-    # --- 执行参数 ---
-    parser.add_argument("--delay", type=float, default=0.1, help="Delay (in seconds) between agent moves in interactive mode.")
-    parser.add_argument("--device", type=str, default="cpu", choices=["auto", "cpu", "cuda"], 
-                        help="Device to use for loading the model (auto, cpu, cuda)")
-    parser.add_argument("--seed", type=int, default=None, help="Random seed for environment reset (optional)")
-
-    return parser
-
-
-def resolve_model_paths(args):
-    """
-    解析模型路径，查找检查点和统计文件。
-    
-    Args:
-        args: 命令行参数
-        
-    Returns:
-        Tuple[str, str]: (模型路径, 统计文件路径)
-    """
-    try:
-        # 检查 training_run_dir 是否是运行目录（包含 models/ 子目录）
-        models_dir = os.path.join(args.training_run_dir, "models")
-        if os.path.exists(models_dir):
-            checkpoint_dir = models_dir
-        else:
-            # 假设 training_run_dir 已经是 models 目录
-            checkpoint_dir = args.training_run_dir
-        
-        # 查找最佳检查点
-        best_checkpoint = find_best_checkpoint(checkpoint_dir, args.checkpoint_steps)
-        print(f"Selected checkpoint: {os.path.basename(best_checkpoint)}")
-        
-        # 查找对应的 VecNormalize 统计文件
-        stats_path = find_vecnormalize_stats(best_checkpoint)
-        if stats_path:
-            print(f"Found VecNormalize stats: {os.path.basename(stats_path)}")
-        else:
-            print("Warning: No VecNormalize stats file found, using unnormalized environment")
-        
-        print(f"Model path: {best_checkpoint}")
-        print(f"Stats path: {stats_path}")
-        
-        return best_checkpoint, stats_path
-        
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        print("Please check that the training_run_dir contains valid checkpoint files.")
-        exit(1)
-    except Exception as e:
-        print(f"Error setting up model paths: {e}")
-        exit(1)
-
-
-def print_play_configuration(args):
-    """打印游戏配置信息"""
+def print_play_configuration(config_manager):
+    """Print play configuration information."""
     print("--- Play Configuration ---")
-    for arg, value in vars(args).items():
-        print(f"{arg}: {value}")
+    play_config = config_manager.get_play_config()
+    env_config = play_config.environment_config or config_manager.get_environment_config()
+    
+    print(f"Mode: {play_config.mode}")
+    print(f"Episodes: {play_config.num_episodes}")
+    print(f"Delay: {play_config.delay}")
+    print(f"Environment: {env_config.width}x{env_config.height} with {env_config.n_mines} mines")
     print("--------------------------")
 
 
-def run_selected_mode(args):
+def run_selected_mode(config_manager, model_path, stats_path):
     """
-    根据选定的模式运行相应的游戏模式。
+    Run the selected play mode.
     
     Args:
-        args: 命令行参数
+        config_manager: Configuration manager instance
+        model_path: Path to model file
+        stats_path: Path to VecNormalize stats file
     """
-    if args.mode == "batch":
-        run_batch_mode(args)
-    elif args.mode == "human":
-        run_human_mode(args)
-    elif args.mode == "agent":
-        run_agent_mode(args)
+    play_config = config_manager.get_play_config()
+    
+    if play_config.mode == "batch":
+        run_batch_mode(config_manager, model_path, stats_path)
+    elif play_config.mode == "human":
+        run_human_mode(config_manager, stats_path)
+    elif play_config.mode == "agent":
+        run_agent_mode(config_manager, model_path, stats_path)
     else:
-        print(f"Error: Unknown mode '{args.mode}'")
+        print(f"Error: Unknown mode '{play_config.mode}'")
         exit(1)
 
 
 def main():
-    """主游戏函数"""
-    # 1. 设置参数解析
+    """Main play function with new configuration system."""
+    # 1. Setup argument parser
     parser = setup_argument_parser()
     args = parser.parse_args()
     
-    # 2. 打印配置信息
-    print_play_configuration(args)
+    # 2. Load and setup configuration
+    config_manager, model_path, stats_path = load_and_setup_play_config(args)
     
-    # 3. 解析模型路径（对于需要AI的模式）
-    if args.mode in ["agent", "batch"]:
-        model_path, stats_path = resolve_model_paths(args)
-        args.model_path = model_path
-        args.stats_path = stats_path
-    else:
-        # 人类模式不需要模型路径
-        args.model_path = None
-        args.stats_path = None
+    # 3. Print configuration information
+    print_play_configuration(config_manager)
     
-    # 4. 运行选定的模式
-    run_selected_mode(args)
+    # 4. Run selected mode
+    run_selected_mode(config_manager, model_path, stats_path)
 
-
-# ===== 主程序 =====
 
 if __name__ == "__main__":
     main()

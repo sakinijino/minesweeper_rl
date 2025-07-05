@@ -18,6 +18,10 @@ from src.env.minesweeper_env import MinesweeperEnv
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from sb3_contrib import MaskablePPO
 
+# Import new configuration system for testing
+from src.config.config_manager import ConfigManager
+from src.config.config_schemas import ModelHyperparams, NetworkArchitecture
+
 
 class TestPolicyKwargs:
     """Test policy kwargs creation functionality."""
@@ -74,6 +78,20 @@ class TestPolicyKwargs:
         
         assert policy_kwargs['net_arch']['pi'] == [64]
         assert policy_kwargs['net_arch']['vf'] == [128]
+    
+    def test_create_policy_kwargs_from_config_manager(self):
+        """Test creating policy kwargs from ConfigManager."""
+        config_manager = ConfigManager()
+        config_manager.config.network_architecture.features_dim = 256
+        config_manager.config.network_architecture.pi_layers = [128, 64]
+        config_manager.config.network_architecture.vf_layers = [512, 256]
+        
+        # Test the new interface we'll add
+        policy_kwargs = create_policy_kwargs(config_manager=config_manager)
+        
+        assert policy_kwargs['features_extractor_kwargs']['features_dim'] == 256
+        assert policy_kwargs['net_arch']['pi'] == [128, 64]
+        assert policy_kwargs['net_arch']['vf'] == [512, 256]
 
 
 class TestNewModelCreation:
@@ -461,6 +479,32 @@ class TestIntegrationScenarios:
             
             assert model == mock_model
             assert env == mock_normalized_env
+    
+    def test_create_model_with_config_manager(self):
+        """Test creating model through unified interface with ConfigManager."""
+        config_manager = ConfigManager()
+        config_manager.config.model_hyperparams.learning_rate = 2e-4
+        config_manager.config.model_hyperparams.gamma = 0.95
+        config_manager.config.network_architecture.features_dim = 256
+        config_manager.config.network_architecture.pi_layers = [128, 64]
+        config_manager.config.network_architecture.vf_layers = [512, 256]
+        config_manager.config.training_execution.device = 'cpu'
+        config_manager.config.training_execution.seed = 42
+        
+        mock_env = Mock()
+        mock_env.observation_space = gym.spaces.Box(low=0, high=1, shape=(1, 5, 5))
+        mock_env.action_space = gym.spaces.Discrete(25)
+        
+        with patch('src.factories.model_factory.create_new_model') as mock_create_new:
+            mock_model = Mock()
+            mock_create_new.return_value = mock_model
+            
+            # Test the new interface we'll add
+            model, env = create_model(env=mock_env, config_manager=config_manager)
+            
+            assert model == mock_model
+            assert env == mock_env
+            mock_create_new.assert_called_once()
     
     def test_play_py_workflow_simulation(self, mock_full_env_setup, temp_dir):
         """Test simulating the play.py workflow."""

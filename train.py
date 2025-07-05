@@ -1,105 +1,134 @@
-# train.py
+# train_new.py - Refactored training script with new configuration system
 import os, datetime, json
 import argparse
-import re
 import gymnasium as gym
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import CheckpointCallback
 
-# 导入你的环境类和特征提取器
+# Import environment and model factories
 from src.env.minesweeper_env import MinesweeperEnv
 from src.env.custom_cnn import CustomCNN
-# 导入 config 来获取默认路径和环境参数
-from src.utils import config
-# 导入 checkpoint 相关工具函数
-from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
-# 导入模型工厂
 from src.factories.model_factory import create_model
-# 导入环境工厂
 from src.factories.environment_factory import create_training_environment
 
+# Legacy config import removed - now using new configuration system
+from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
 
-# ===== 辅助函数 =====
-
-def parse_int_list(string_list):
-    """Helper function to parse comma-separated integers."""
-    if not string_list: # Handle empty string case
-        return []
-    try:
-        return [int(x.strip()) for x in string_list.split(',') if x.strip()]
-    except ValueError as e:
-        raise argparse.ArgumentTypeError(f"Invalid integer list format: {string_list}. Error: {e}")
+# Import new configuration system
+from src.config.config_manager import ConfigManager
+from src.config.config_schemas import TrainingConfig
 
 
 def setup_argument_parser():
     """
-    设置并返回配置好的参数解析器。
+    Setup and return configured argument parser with new configuration system.
     
     Returns:
-        ArgumentParser: 配置好的参数解析器
+        ArgumentParser: Configured argument parser
     """
-    parser = argparse.ArgumentParser(description="Train MaskablePPO agent for Minesweeper.")
+    parser = argparse.ArgumentParser(description="Train MaskablePPO agent for Minesweeper with new config system.")
 
-    # --- PPO Hyperparameters ---
-    parser.add_argument("--total_timesteps", type=int, default=1_000_000, help="Total training timesteps")
-    parser.add_argument("--n_envs", type=int, default=4, help="Number of parallel environments")
-    parser.add_argument("--n_steps", type=int, default=1024, help="Number of steps per environment per update")
-    parser.add_argument("--batch_size", type=int, default=128, help="Minibatch size")
-    parser.add_argument("--n_epochs", type=int, default=10, help="Number of optimization epochs per update")
-    parser.add_argument("--lr", "--learning_rate", type=float, default=1e-4, dest='learning_rate', help="Learning rate")
-    parser.add_argument("--ent_coef", type=float, default=0.01, help="Entropy coefficient")
-    parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
-    parser.add_argument("--gae_lambda", type=float, default=0.90, help="Factor for Generalized Advantage Estimation")
-    parser.add_argument("--clip_range", type=float, default=0.2, help="Clipping parameter for PPO")
-    parser.add_argument("--vf_coef", type=float, default=1.0, help="Value function coefficient in the loss calculation")
+    # Core training arguments - simplified for most common overrides
+    parser.add_argument("--config", type=str, default=None, 
+                        help="Path to configuration file (JSON format)")
+    parser.add_argument("--total_timesteps", type=int, default=None, 
+                        help="Total training timesteps")
+    parser.add_argument("--learning_rate", type=float, default=None, 
+                        help="Learning rate")
+    parser.add_argument("--n_envs", type=int, default=None, 
+                        help="Number of parallel environments")
 
-    # --- Policy Network Architecture ---
-    parser.add_argument("--features_dim", type=int, default=128, help="Output dimension of the CNN features extractor")
-    parser.add_argument("--pi_layers", type=str, default="64,64",
-                        help="Comma-separated layer sizes for the policy network head (e.g., '128,64')")
-    parser.add_argument("--vf_layers", type=str, default="256,256",
-                        help="Comma-separated layer sizes for the value network head (e.g., '512,256')")
-    parser.add_argument("--checkpoint_freq", type=int, default=50000, help="Total steps between checkpoints")
+    # Environment parameters - commonly overridden
+    parser.add_argument("--width", type=int, default=None, 
+                        help="Width of the Minesweeper grid")
+    parser.add_argument("--height", type=int, default=None, 
+                        help="Height of the Minesweeper grid")
+    parser.add_argument("--n_mines", type=int, default=None, 
+                        help="Number of mines in the grid")
 
-    # --- Paths and Naming ---
-    parser.add_argument("--experiment_base_dir", type=str, default=config.EXPERIMENT_BASE_DIR, help="Base directory for all training run outputs")
-    parser.add_argument("--model_prefix", type=str, default=config.MODEL_PREFIX, help="Prefix for saved model files and VecNormalize stats")
+    # Training execution
+    parser.add_argument("--device", type=str, default=None, 
+                        choices=["auto", "cpu", "cuda"], 
+                        help="Device to use for training")
+    parser.add_argument("--seed", type=int, default=None, 
+                        help="Random seed for reproducibility")
 
-    # --- Environment Parameters ---
-    parser.add_argument("--width", type=int, default=config.WIDTH, help="Width of the Minesweeper grid")
-    parser.add_argument("--height", type=int, default=config.HEIGHT, help="Height of the Minesweeper grid")
-    parser.add_argument("--n_mines", type=int, default=config.N_MINES, help="Number of mines in the grid")
-    parser.add_argument("--reward_win", type=float, default=config.REWARD_WIN, help="Reward for winning the game")
-    parser.add_argument("--reward_lose", type=float, default=config.REWARD_LOSE, help="Penalty for hitting a mine")
-    parser.add_argument("--reward_reveal", type=float, default=config.REWARD_REVEAL, help="Reward for revealing a safe cell")
-    parser.add_argument("--reward_invalid", type=float, default=config.REWARD_INVALID, help="Penalty for clicking revealed cells")
-    parser.add_argument("--max_reward_per_step", type=float, default=config.MAX_REWARD_PER_STEP, help="Maximum reward in one step")
+    # Path and output configuration
+    parser.add_argument("--experiment_base_dir", type=str, default=None, 
+                        help="Base directory for all training run outputs")
+    parser.add_argument("--model_prefix", type=str, default=None, 
+                        help="Prefix for saved model files")
 
-    # --- Continue Training ---
-    parser.add_argument("--continue_from", type=str, default=None, help="Directory path containing checkpoints to continue training from")
-    parser.add_argument("--continue_steps", type=int, default=None, help="Specific step checkpoint to continue from (optional, uses latest if not specified)")
+    # Continue training
+    parser.add_argument("--continue_from", type=str, default=None, 
+                        help="Directory path containing checkpoints to continue training from")
+    parser.add_argument("--continue_steps", type=int, default=None, 
+                        help="Specific step checkpoint to continue from")
 
-    # --- Other Settings ---
-    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
-    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], help="Device to use for training (auto, cpu, cuda)")
-    parser.add_argument("--vec_env_type", type=str, default="subproc", choices=["subproc", "dummy"], help="Type of VecEnv (subproc for parallel, dummy for sequential/debug)")
+    # Advanced parameters (less commonly overridden)
+    parser.add_argument("--n_steps", type=int, default=None, 
+                        help="Number of steps per environment per update")
+    parser.add_argument("--batch_size", type=int, default=None, 
+                        help="Minibatch size")
+    parser.add_argument("--n_epochs", type=int, default=None, 
+                        help="Number of optimization epochs per update")
+    parser.add_argument("--ent_coef", type=float, default=None, 
+                        help="Entropy coefficient")
+    parser.add_argument("--gamma", type=float, default=None, 
+                        help="Discount factor")
+    parser.add_argument("--gae_lambda", type=float, default=None, 
+                        help="Factor for Generalized Advantage Estimation")
+    parser.add_argument("--clip_range", type=float, default=None, 
+                        help="Clipping parameter for PPO")
+    parser.add_argument("--vf_coef", type=float, default=None, 
+                        help="Value function coefficient")
+
+    # Network architecture
+    parser.add_argument("--features_dim", type=int, default=None, 
+                        help="Output dimension of the CNN features extractor")
+    parser.add_argument("--pi_layers", type=str, default=None,
+                        help="Comma-separated layer sizes for policy network (e.g., '128,64')")
+    parser.add_argument("--vf_layers", type=str, default=None,
+                        help="Comma-separated layer sizes for value network (e.g., '512,256')")
+
+    # Rewards (less commonly overridden)
+    parser.add_argument("--reward_win", type=float, default=None, 
+                        help="Reward for winning the game")
+    parser.add_argument("--reward_lose", type=float, default=None, 
+                        help="Penalty for hitting a mine")
+    parser.add_argument("--reward_reveal", type=float, default=None, 
+                        help="Reward for revealing a safe cell")
+    parser.add_argument("--reward_invalid", type=float, default=None, 
+                        help="Penalty for clicking revealed cells")
+    parser.add_argument("--max_reward_per_step", type=float, default=None, 
+                        help="Maximum reward in one step")
+
+    # Other settings
+    parser.add_argument("--checkpoint_freq", type=int, default=None, 
+                        help="Steps between checkpoints")
+    parser.add_argument("--vec_env_type", type=str, default=None, 
+                        choices=["subproc", "dummy"], 
+                        help="Type of VecEnv")
 
     return parser
 
 
-def handle_continue_training_logic(args, parser):
+def load_and_setup_config(args):
     """
-    处理继续训练的逻辑，包括查找检查点和加载配置。
+    Load and setup configuration based on arguments.
     
     Args:
-        args: 解析后的命令行参数
-        parser: 参数解析器实例
+        args: Parsed command line arguments
         
     Returns:
-        Tuple[bool, str, dict, str]: (是否继续训练, 检查点路径, 加载的配置, 原始运行目录)
+        Tuple[ConfigManager, bool, str, dict, str]: 
+        (config_manager, continue_training, checkpoint_path, loaded_config, original_run_dir)
     """
+    config_manager = ConfigManager()
+    
+    # Handle continue training first
     continue_training = False
     checkpoint_path = None
     loaded_config = None
@@ -114,68 +143,98 @@ def handle_continue_training_logic(args, parser):
         if os.path.exists(models_dir):
             original_run_dir = checkpoint_dir
             checkpoint_dir = models_dir
+            
+            # Load configuration from training run
+            try:
+                config_manager.load_from_training_run(original_run_dir)
+                print(f"Loaded configuration from training run: {original_run_dir}")
+            except FileNotFoundError:
+                print(f"Warning: No training config found in {original_run_dir}, using defaults")
         
         # Find the best checkpoint to continue from
         try:
             checkpoint_path = find_best_checkpoint(checkpoint_dir, args.continue_steps)
             print(f"Found checkpoint to continue from: {checkpoint_path}")
-            
-            # Try to load the original training configuration
-            if original_run_dir:
-                config_path = os.path.join(original_run_dir, "training_config.json")
-                loaded_config = load_training_config(config_path)
-                if loaded_config:
-                    print(f"Loaded original training configuration from: {config_path}")
-                    # Update args with loaded config, but allow command line args to override
-                    for key, value in loaded_config.items():
-                        if key in vars(args) and getattr(args, key) == parser.get_default(key):
-                            # Only update if current value is the default (not explicitly set)
-                            setattr(args, key, value)
-                    print("Updated training configuration with loaded values (command line args take precedence)")
-                
         except FileNotFoundError as e:
             print(f"Error: {e}")
             exit(1)
     
-    return continue_training, checkpoint_path, loaded_config, original_run_dir
+    # Load configuration file if specified
+    elif args.config:
+        try:
+            config_manager.load_from_file(args.config)
+            print(f"Loaded configuration from file: {args.config}")
+        except FileNotFoundError:
+            print(f"Error: Configuration file not found: {args.config}")
+            exit(1)
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in configuration file: {e}")
+            exit(1)
+    
+    # Update configuration with command line arguments
+    config_manager.update_from_args(args)
+    
+    # Handle pi_layers and vf_layers parsing
+    if args.pi_layers:
+        try:
+            pi_layers = [int(x.strip()) for x in args.pi_layers.split(',') if x.strip()]
+            config_manager.config.network_architecture.pi_layers = pi_layers
+        except ValueError as e:
+            print(f"Error parsing pi_layers: {e}")
+            exit(1)
+    
+    if args.vf_layers:
+        try:
+            vf_layers = [int(x.strip()) for x in args.vf_layers.split(',') if x.strip()]
+            config_manager.config.network_architecture.vf_layers = vf_layers
+        except ValueError as e:
+            print(f"Error parsing vf_layers: {e}")
+            exit(1)
+    
+    # Validate configuration
+    if not config_manager.validate_config():
+        print("Error: Invalid configuration parameters")
+        exit(1)
+    
+    return config_manager, continue_training, checkpoint_path, loaded_config, original_run_dir
 
 
-def create_training_directories(args, continue_training, original_run_dir):
+def create_training_directories(config_manager, continue_training, original_run_dir):
     """
-    创建训练相关的目录结构。
+    Create training directories based on configuration.
     
     Args:
-        args: 命令行参数
-        continue_training: 是否为继续训练
-        original_run_dir: 原始运行目录（如果是继续训练）
+        config_manager: Configuration manager instance
+        continue_training: Whether this is continue training
+        original_run_dir: Original run directory for continue training
         
     Returns:
-        Tuple[str, str, str, str, str, str]: (运行目录, 日志目录, 模型目录, 配置路径, 最终模型路径, 统计文件路径)
+        Tuple[str, str, str, str, str, str]: Directory paths
     """
+    config = config_manager.config
+    
     if continue_training and original_run_dir:
-        # For continue training, create a new timestamped directory based on original
+        # For continue training, create a new timestamped directory
         original_run_name = os.path.basename(os.path.normpath(original_run_dir))
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         run_name = f"{original_run_name}_continue_{timestamp}"
-        run_dir = os.path.join(args.experiment_base_dir, run_name)
+        run_dir = os.path.join(config.paths_config.experiment_base_dir, run_name)
         print(f"Continuing training in new directory: {run_dir}")
-        print(f"Original run directory: {original_run_dir}")
-        print(f"Extracted original run name: {original_run_name}")
     else:
         # Normal training - create new directory
         run_name_parts = [
-            args.model_prefix,
-            f"{args.width}x{args.height}x{args.n_mines}",
+            config.paths_config.model_prefix,
+            f"{config.environment_config.width}x{config.environment_config.height}x{config.environment_config.n_mines}",
         ]
 
-        if args.seed is not None:
-            run_name_parts.append(f"seed{args.seed}")
+        if config.training_execution.seed is not None:
+            run_name_parts.append(f"seed{config.training_execution.seed}")
         
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         run_name_parts.append(timestamp)
 
         run_name = "_".join(run_name_parts)
-        run_dir = os.path.join(args.experiment_base_dir, run_name)
+        run_dir = os.path.join(config.paths_config.experiment_base_dir, run_name)
 
     # Create subdirectories
     specific_log_dir = os.path.join(run_dir, "logs")
@@ -193,120 +252,49 @@ def create_training_directories(args, continue_training, original_run_dir):
     return run_dir, specific_log_dir, specific_model_dir, config_save_path, final_model_path, stats_path
 
 
-def save_training_config(args, config_save_path):
+def save_training_config(config_manager, config_save_path):
     """
-    保存训练配置到JSON文件。
+    Save training configuration to JSON file.
     
     Args:
-        args: 命令行参数
-        config_save_path: 配置文件保存路径
+        config_manager: Configuration manager instance
+        config_save_path: Path to save configuration
     """
-    config_to_save = {}
-    # 将 argparse 的 Namespace 对象转换为字典
-    for key, value in vars(args).items():
-        config_to_save[key] = value
-    
     try:
-        with open(config_save_path, 'w') as f:
-            json.dump(config_to_save, f, indent=4, sort_keys=True)
+        config_manager.save_to_file(config_save_path)
         print(f"Training configuration saved to: {config_save_path}")
     except Exception as e:
         print(f"Error saving configuration: {e}")
 
 
-def parse_network_architecture(args):
+def create_training_environment_from_config(config_manager):
     """
-    解析网络架构参数。
+    Create training environment from configuration.
     
     Args:
-        args: 命令行参数
+        config_manager: Configuration manager instance
         
     Returns:
-        Tuple[List[int], List[int]]: (策略网络层大小, 价值网络层大小)
+        Training environment
     """
-    try:
-        pi_layer_sizes = parse_int_list(args.pi_layers)
-        vf_layer_sizes = parse_int_list(args.vf_layers)
-        print(f"Parsed policy layers: {pi_layer_sizes}")
-        print(f"Parsed value layers: {vf_layer_sizes}")
-        return pi_layer_sizes, vf_layer_sizes
-    except argparse.ArgumentTypeError as e:
-        print(f"Error parsing network layers: {e}")
-        exit(1)
+    # Use environment factory with ConfigManager directly (no need for args conversion)
+    return create_training_environment(config_manager=config_manager)
 
 
-def create_training_env(args, vecnormalize_stats_path=None):
+def create_model_from_config(config_manager, train_env, continue_training, checkpoint_path, specific_log_dir):
     """
-    创建训练环境（使用环境工厂）。
+    Create model from configuration.
     
     Args:
-        args: 命令行参数
-        vecnormalize_stats_path: VecNormalize统计文件路径
+        config_manager: Configuration manager instance
+        train_env: Training environment
+        continue_training: Whether continuing training
+        checkpoint_path: Path to checkpoint (if continuing)
+        specific_log_dir: Tensorboard log directory
         
     Returns:
-        VecNormalize: 配置好的向量化环境
+        Tuple[model, updated_env]
     """
-    # 确定向量化环境类型
-    vec_env_cls = SubprocVecEnv if args.vec_env_type == "subproc" and args.n_envs > 1 else DummyVecEnv
-    print(f"Using VecEnv type: {vec_env_cls.__name__}")
-    
-    return create_training_environment(args, vecnormalize_stats_path)
-
-
-def setup_checkpoint_callback(args, specific_model_dir):
-    """
-    设置检查点回调。
-    
-    Args:
-        args: 命令行参数
-        specific_model_dir: 模型保存目录
-        
-    Returns:
-        CheckpointCallback: 配置好的检查点回调
-    """
-    # Save a checkpoint every N steps, where N is roughly checkpoint_freq total steps
-    save_freq_per_env = max(args.checkpoint_freq // args.n_envs, 1)
-    checkpoint_callback = CheckpointCallback(
-        save_freq=save_freq_per_env,
-        save_path=specific_model_dir,
-        save_replay_buffer=True, # Save replay buffer for off-policy algos (doesn't hurt for PPO)
-        save_vecnormalize=True # Save VecNormalize statistics automatically
-    )
-    print(f"Checkpoints will be saved every {save_freq_per_env * args.n_envs} total steps.")
-    return checkpoint_callback
-
-
-def create_training_model(args, train_env, continue_training, checkpoint_path, specific_log_dir, pi_layer_sizes, vf_layer_sizes):
-    """
-    创建或加载训练模型。
-    
-    Args:
-        args: 命令行参数
-        train_env: 训练环境
-        continue_training: 是否继续训练
-        checkpoint_path: 检查点路径
-        specific_log_dir: 日志目录
-        pi_layer_sizes: 策略网络层大小
-        vf_layer_sizes: 价值网络层大小
-        
-    Returns:
-        Tuple[MaskablePPO, Any]: (模型, 更新后的环境)
-    """
-    # Prepare model configuration
-    model_config = {
-        'n_steps': args.n_steps,
-        'batch_size': args.batch_size,
-        'n_epochs': args.n_epochs,
-        'learning_rate': args.learning_rate,
-        'ent_coef': args.ent_coef,
-        'gamma': args.gamma,
-        'gae_lambda': args.gae_lambda,
-        'clip_range': args.clip_range,
-        'vf_coef': args.vf_coef,
-        'device': args.device,
-        'seed': args.seed
-    }
-    
     # Determine checkpoint and stats paths for continue training
     checkpoint_to_load = checkpoint_path if continue_training else None
     vecnormalize_stats_path = None
@@ -321,50 +309,72 @@ def create_training_model(args, train_env, continue_training, checkpoint_path, s
     else:
         print("Creating new model...")
     
-    # Create model using factory
+    # Create model using factory with ConfigManager
     try:
         model, train_env = create_model(
             env=train_env,
             checkpoint_path=checkpoint_to_load,
             vecnormalize_stats_path=vecnormalize_stats_path,
             tensorboard_log=specific_log_dir,
-            features_dim=args.features_dim,
-            pi_layers=pi_layer_sizes,
-            vf_layers=vf_layer_sizes,
-            **model_config
+            config_manager=config_manager
         )
         print(f"Model created/loaded successfully on device: {model.device}")
-        if continue_training:
-            print(f"TensorBoard logging set to: {specific_log_dir}")
         return model, train_env
     except Exception as e:
         print(f"Error creating model: {e}")
         exit(1)
 
 
-def run_training_loop(model, args, checkpoint_callback, continue_training, final_model_path, stats_path, train_env):
+def setup_checkpoint_callback(config_manager, specific_model_dir):
     """
-    执行训练循环。
+    Setup checkpoint callback from configuration.
     
     Args:
-        model: 训练模型
-        args: 命令行参数
-        checkpoint_callback: 检查点回调
-        continue_training: 是否继续训练
-        final_model_path: 最终模型保存路径
-        stats_path: 统计文件保存路径
-        train_env: 训练环境
+        config_manager: Configuration manager instance
+        specific_model_dir: Model save directory
+        
+    Returns:
+        CheckpointCallback
     """
+    config = config_manager.config
+    
+    # Save a checkpoint every N steps
+    save_freq_per_env = max(config.training_execution.checkpoint_freq // config.training_execution.n_envs, 1)
+    checkpoint_callback = CheckpointCallback(
+        save_freq=save_freq_per_env,
+        save_path=specific_model_dir,
+        save_replay_buffer=True,
+        save_vecnormalize=True
+    )
+    print(f"Checkpoints will be saved every {save_freq_per_env * config.training_execution.n_envs} total steps.")
+    return checkpoint_callback
+
+
+def run_training_loop(model, config_manager, checkpoint_callback, continue_training, final_model_path, stats_path, train_env):
+    """
+    Execute training loop.
+    
+    Args:
+        model: Training model
+        config_manager: Configuration manager instance
+        checkpoint_callback: Checkpoint callback
+        continue_training: Whether this is continue training
+        final_model_path: Final model save path
+        stats_path: Stats save path
+        train_env: Training environment
+    """
+    config = config_manager.config
+    
     if continue_training:
         print("Continuing training from checkpoint...")
-        reset_timesteps = False  # Don't reset timesteps when continuing
+        reset_timesteps = False
     else:
         print("Starting training from scratch...")
-        reset_timesteps = True   # Reset timesteps for new training
+        reset_timesteps = True
         
     try:
         model.learn(
-            total_timesteps=args.total_timesteps,
+            total_timesteps=config.training_execution.total_timesteps,
             callback=checkpoint_callback,
             reset_num_timesteps=reset_timesteps
         )
@@ -375,8 +385,7 @@ def run_training_loop(model, args, checkpoint_callback, continue_training, final
         model.save(final_model_path)
         print(f"Training finished or interrupted. Final model saved to: {final_model_path}")
 
-        # VecNormalize stats are saved by the callback, but save again explicitly
-        # to ensure the latest stats associated with the final model are saved.
+        # Save VecNormalize stats
         train_env.save(stats_path)
         print(f"Final environment VecNormalize stats saved to: {stats_path}")
 
@@ -385,53 +394,55 @@ def run_training_loop(model, args, checkpoint_callback, continue_training, final
         print("Environment closed.")
 
 
-def print_training_configuration(args):
-    """打印训练配置信息"""
+def print_training_configuration(config_manager):
+    """Print training configuration information."""
     print("--- Training Configuration ---")
-    for arg, value in vars(args).items():
-        print(f"{arg}: {value}")
+    config_dict = config_manager.get_training_config().__dict__
+    for section, section_config in config_dict.items():
+        print(f"{section}:")
+        if hasattr(section_config, '__dict__'):
+            for key, value in section_config.__dict__.items():
+                print(f"  {key}: {value}")
+        else:
+            print(f"  {section_config}")
     print("-----------------------------")
 
 
 def main():
-    """主训练函数"""
-    # 1. 设置参数解析
+    """Main training function with new configuration system."""
+    # 1. Setup argument parser
     parser = setup_argument_parser()
     args = parser.parse_args()
     
-    # 2. 处理继续训练逻辑
-    continue_training, checkpoint_path, loaded_config, original_run_dir = handle_continue_training_logic(args, parser)
+    # 2. Load and setup configuration
+    config_manager, continue_training, checkpoint_path, loaded_config, original_run_dir = load_and_setup_config(args)
     
-    # 3. 打印配置信息
-    print_training_configuration(args)
+    # 3. Print configuration information
+    print_training_configuration(config_manager)
     
-    # 4. 创建训练目录
+    # 4. Create training directories
     run_dir, specific_log_dir, specific_model_dir, config_save_path, final_model_path, stats_path = create_training_directories(
-        args, continue_training, original_run_dir
+        config_manager, continue_training, original_run_dir
     )
     
-    # 5. 保存训练配置
-    save_training_config(args, config_save_path)
+    # 5. Save training configuration
+    save_training_config(config_manager, config_save_path)
     
-    # 6. 解析网络架构
-    pi_layer_sizes, vf_layer_sizes = parse_network_architecture(args)
-    
-    # 7. 创建训练环境
-    train_env = create_training_environment(args)
+    # 6. Create training environment
+    train_env = create_training_environment_from_config(config_manager)
     print(f"Environment VecNormalize stats will be saved to: {stats_path}")
     
-    # 8. 设置检查点回调
-    checkpoint_callback = setup_checkpoint_callback(args, specific_model_dir)
+    # 7. Setup checkpoint callback
+    checkpoint_callback = setup_checkpoint_callback(config_manager, specific_model_dir)
     
-    # 9. 创建训练模型
-    model, train_env = create_training_model(
-        args, train_env, continue_training, checkpoint_path, 
-        specific_log_dir, pi_layer_sizes, vf_layer_sizes
+    # 8. Create training model
+    model, train_env = create_model_from_config(
+        config_manager, train_env, continue_training, checkpoint_path, specific_log_dir
     )
     
-    # 10. 执行训练循环
+    # 9. Execute training loop
     run_training_loop(
-        model, args, checkpoint_callback, continue_training, 
+        model, config_manager, checkpoint_callback, continue_training, 
         final_model_path, stats_path, train_env
     )
 

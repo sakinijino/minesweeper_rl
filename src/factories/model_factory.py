@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.vec_env import VecNormalize
 from ..env.custom_cnn import CustomCNN
+from ..config.config_manager import ConfigManager
 
 
 class ModelCreationError(Exception):
@@ -23,9 +24,10 @@ class ModelCreationError(Exception):
 
 
 def create_policy_kwargs(
-    features_dim: int = 128,
+    features_dim: Optional[int] = None,
     pi_layers: Optional[List[int]] = None,
-    vf_layers: Optional[List[int]] = None
+    vf_layers: Optional[List[int]] = None,
+    config_manager: Optional[ConfigManager] = None
 ) -> Dict[str, Any]:
     """
     Create policy kwargs for MaskablePPO model.
@@ -34,37 +36,46 @@ def create_policy_kwargs(
         features_dim: Output dimension of the CNN features extractor
         pi_layers: Layer sizes for the policy network head
         vf_layers: Layer sizes for the value network head
+        config_manager: ConfigManager instance for configuration (preferred)
         
     Returns:
         Dictionary containing policy kwargs for MaskablePPO
     """
-    if pi_layers is None:
-        pi_layers = [64, 64]
-    if vf_layers is None:
-        vf_layers = [256, 256]
+    # Get values from ConfigManager if provided, otherwise use parameters or defaults
+    if config_manager is not None:
+        net_arch = config_manager.get_network_architecture()
+        final_features_dim = features_dim if features_dim is not None else net_arch.features_dim
+        final_pi_layers = pi_layers if pi_layers is not None else net_arch.pi_layers
+        final_vf_layers = vf_layers if vf_layers is not None else net_arch.vf_layers
+    else:
+        # Use provided parameters or defaults
+        final_features_dim = features_dim if features_dim is not None else 128
+        final_pi_layers = pi_layers if pi_layers is not None else [64, 64]
+        final_vf_layers = vf_layers if vf_layers is not None else [256, 256]
     
     return {
         'features_extractor_class': CustomCNN,
-        'features_extractor_kwargs': {'features_dim': features_dim},
-        'net_arch': {'pi': pi_layers, 'vf': vf_layers}
+        'features_extractor_kwargs': {'features_dim': final_features_dim},
+        'net_arch': {'pi': final_pi_layers, 'vf': final_vf_layers}
     }
 
 
 def create_new_model(
     env,
-    n_steps: int,
-    batch_size: int, 
-    n_epochs: int,
-    learning_rate: float,
-    ent_coef: float,
-    gamma: float,
-    gae_lambda: float,
-    clip_range: float,
-    vf_coef: float,
-    device: str,
+    n_steps: Optional[int] = None,
+    batch_size: Optional[int] = None, 
+    n_epochs: Optional[int] = None,
+    learning_rate: Optional[float] = None,
+    ent_coef: Optional[float] = None,
+    gamma: Optional[float] = None,
+    gae_lambda: Optional[float] = None,
+    clip_range: Optional[float] = None,
+    vf_coef: Optional[float] = None,
+    device: Optional[str] = None,
     seed: Optional[int] = None,
     tensorboard_log: Optional[str] = None,
     policy_kwargs: Optional[Dict[str, Any]] = None,
+    config_manager: Optional[ConfigManager] = None,
     **kwargs
 ) -> MaskablePPO:
     """
@@ -85,27 +96,62 @@ def create_new_model(
         seed: Random seed for reproducibility
         tensorboard_log: Path for tensorboard logging
         policy_kwargs: Policy configuration kwargs
+        config_manager: ConfigManager instance for configuration (preferred)
         **kwargs: Additional arguments (ignored)
         
     Returns:
         Configured MaskablePPO model
     """
+    # Get values from ConfigManager if provided, otherwise use parameters
+    if config_manager is not None:
+        model_hyperparams = config_manager.get_model_hyperparams()
+        training_execution = config_manager.get_training_execution()
+        
+        final_n_steps = n_steps if n_steps is not None else model_hyperparams.n_steps
+        final_batch_size = batch_size if batch_size is not None else model_hyperparams.batch_size
+        final_n_epochs = n_epochs if n_epochs is not None else model_hyperparams.n_epochs
+        final_learning_rate = learning_rate if learning_rate is not None else model_hyperparams.learning_rate
+        final_ent_coef = ent_coef if ent_coef is not None else model_hyperparams.ent_coef
+        final_gamma = gamma if gamma is not None else model_hyperparams.gamma
+        final_gae_lambda = gae_lambda if gae_lambda is not None else model_hyperparams.gae_lambda
+        final_clip_range = clip_range if clip_range is not None else model_hyperparams.clip_range
+        final_vf_coef = vf_coef if vf_coef is not None else model_hyperparams.vf_coef
+        final_device = device if device is not None else training_execution.device
+        final_seed = seed if seed is not None else training_execution.seed
+    else:
+        # Ensure all required parameters are provided when not using ConfigManager
+        if any(param is None for param in [n_steps, batch_size, n_epochs, learning_rate, ent_coef, 
+                                         gamma, gae_lambda, clip_range, vf_coef, device]):
+            raise ValueError("All model parameters must be provided when config_manager is None")
+        
+        final_n_steps = n_steps
+        final_batch_size = batch_size
+        final_n_epochs = n_epochs
+        final_learning_rate = learning_rate
+        final_ent_coef = ent_coef
+        final_gamma = gamma
+        final_gae_lambda = gae_lambda
+        final_clip_range = clip_range
+        final_vf_coef = vf_coef
+        final_device = device
+        final_seed = seed
+    
     # Create model arguments
     model_args = {
         'policy': "CnnPolicy",
         'env': env,
         'verbose': 1,
-        'n_steps': n_steps,
-        'batch_size': batch_size,
-        'n_epochs': n_epochs,
-        'learning_rate': learning_rate,
-        'ent_coef': ent_coef,
-        'gamma': gamma,
-        'gae_lambda': gae_lambda,
-        'clip_range': clip_range,
-        'vf_coef': vf_coef,
-        'device': device,
-        'seed': seed
+        'n_steps': final_n_steps,
+        'batch_size': final_batch_size,
+        'n_epochs': final_n_epochs,
+        'learning_rate': final_learning_rate,
+        'ent_coef': final_ent_coef,
+        'gamma': final_gamma,
+        'gae_lambda': final_gae_lambda,
+        'clip_range': final_clip_range,
+        'vf_coef': final_vf_coef,
+        'device': final_device,
+        'seed': final_seed
     }
     
     # Add policy kwargs if provided
@@ -195,9 +241,10 @@ def create_model(
     checkpoint_path: Optional[str] = None,
     vecnormalize_stats_path: Optional[str] = None,
     tensorboard_log: Optional[str] = None,
-    features_dim: int = 128,
+    features_dim: Optional[int] = None,
     pi_layers: Optional[List[int]] = None,
     vf_layers: Optional[List[int]] = None,
+    config_manager: Optional[ConfigManager] = None,
     **model_config
 ) -> Tuple[MaskablePPO, Any]:
     """
@@ -215,6 +262,7 @@ def create_model(
         features_dim: CNN features dimension
         pi_layers: Policy network layer sizes
         vf_layers: Value network layer sizes
+        config_manager: ConfigManager instance for configuration (preferred)
         **model_config: Additional model configuration parameters
         
     Returns:
@@ -241,7 +289,8 @@ def create_model(
             policy_kwargs = create_policy_kwargs(
                 features_dim=features_dim,
                 pi_layers=pi_layers,
-                vf_layers=vf_layers
+                vf_layers=vf_layers,
+                config_manager=config_manager
             )
             
             # Create the model
@@ -250,6 +299,7 @@ def create_model(
                 device=device,
                 tensorboard_log=tensorboard_log,
                 policy_kwargs=policy_kwargs,
+                config_manager=config_manager,
                 **model_config
             )
         
@@ -292,9 +342,10 @@ def get_model_summary(model: MaskablePPO) -> Dict[str, Any]:
 def create_training_model(
     env,
     tensorboard_log: str,
-    features_dim: int = 128,
+    features_dim: Optional[int] = None,
     pi_layers: Optional[List[int]] = None,
     vf_layers: Optional[List[int]] = None,
+    config_manager: Optional[ConfigManager] = None,
     **training_args
 ) -> MaskablePPO:
     """
@@ -306,6 +357,7 @@ def create_training_model(
         features_dim: CNN features dimension
         pi_layers: Policy network layer sizes
         vf_layers: Value network layer sizes
+        config_manager: ConfigManager instance for configuration (preferred)
         **training_args: Training configuration arguments
         
     Returns:
@@ -317,6 +369,7 @@ def create_training_model(
         features_dim=features_dim,
         pi_layers=pi_layers,
         vf_layers=vf_layers,
+        config_manager=config_manager,
         **training_args
     )
     return model
