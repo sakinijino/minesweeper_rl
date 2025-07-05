@@ -208,8 +208,14 @@ def find_latest_experiment_dir(experiment_base_dir):
     if not experiment_dirs:
         raise FileNotFoundError(f"No experiment directories found in {experiment_base_dir}")
     
-    # Sort by timestamp (latest first)
-    experiment_dirs.sort(key=lambda x: next(part for part in x.split('_') if part.isdigit() and len(part) == 14), reverse=True)
+    def get_latest_timestamp(dir_name):
+        """Extract the latest timestamp from directory name."""
+        parts = dir_name.split('_')
+        timestamps = [part for part in parts if part.isdigit() and len(part) == 14]
+        return max(timestamps) if timestamps else '0'
+    
+    # Sort by latest timestamp (latest first)
+    experiment_dirs.sort(key=get_latest_timestamp, reverse=True)
     
     latest_dir = os.path.join(experiment_base_dir, experiment_dirs[0])
     return latest_dir
