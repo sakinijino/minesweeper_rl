@@ -180,32 +180,6 @@ def resolve_model_paths_from_run_dir(run_dir, checkpoint_steps=None):
         raise Exception(f"Could not resolve model paths from {run_dir}: {e}")
 
 
-def create_environment_from_config(config_manager, render_mode=None, vecnormalize_stats_path=None):
-    """
-    Create environment from configuration.
-    
-    Args:
-        config_manager: Configuration manager instance
-        render_mode: Render mode ('human', None, 'rgb_array')
-        vecnormalize_stats_path: VecNormalize stats file path
-        
-    Returns:
-        Tuple[env, raw_env]: Environment instances
-    """
-    # Determine mode
-    if render_mode == 'human':
-        mode = 'interactive'
-    else:
-        mode = 'batch'
-    
-    # Use environment factory with ConfigManager directly (no need for args conversion)
-    env, raw_env = create_inference_environment(
-        config_manager=config_manager,
-        mode=mode,
-        vecnormalize_stats_path=vecnormalize_stats_path
-    )
-    
-    return env, raw_env
 
 
 def load_model_and_environment(config_manager, env, model_path, stats_path):
@@ -236,9 +210,9 @@ def load_model_and_environment(config_manager, env, model_path, stats_path):
     try:
         model, env = create_inference_model(
             env=env,
+            config_manager=config_manager,
             checkpoint_path=model_path,
-            vecnormalize_stats_path=stats_path,
-            device=device
+            vecnormalize_stats_path=stats_path
         )
         print(f"Model loaded on device: {model.device}")
         
@@ -298,7 +272,11 @@ def run_batch_mode(config_manager, model_path, stats_path):
     print(f"--- Running Batch Mode ({play_config.num_episodes} episodes) ---")
 
     # Create environment (no rendering)
-    env, _ = create_environment_from_config(config_manager, render_mode=None, vecnormalize_stats_path=stats_path)
+    env, _ = create_inference_environment(
+        config_manager=config_manager,
+        mode='batch',
+        vecnormalize_stats_path=stats_path
+    )
     setup_random_seed(config_manager, env)
     
     # Load model
@@ -358,7 +336,11 @@ def run_human_mode(config_manager, stats_path):
     print("--- Running Human Mode ---")
 
     # Create environment (with rendering)
-    env, env_instance = create_environment_from_config(config_manager, render_mode='human', vecnormalize_stats_path=stats_path)
+    env, env_instance = create_inference_environment(
+        config_manager=config_manager,
+        mode='human',
+        vecnormalize_stats_path=stats_path
+    )
     setup_random_seed(config_manager, env)
     
     # Human mode doesn't need a model, but VecNormalize stats are handled in environment factory
@@ -462,7 +444,11 @@ def run_agent_mode(config_manager, model_path, stats_path):
     print("--- Running Agent Mode ---")
 
     # Create environment (with rendering)
-    env, env_instance = create_environment_from_config(config_manager, render_mode='human', vecnormalize_stats_path=stats_path)
+    env, env_instance = create_inference_environment(
+        config_manager=config_manager,
+        mode='agent',
+        vecnormalize_stats_path=stats_path
+    )
     setup_random_seed(config_manager, env)
     
     # Load model

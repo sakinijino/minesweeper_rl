@@ -24,139 +24,99 @@ class ModelCreationError(Exception):
 
 
 def create_policy_kwargs(
-    features_dim: Optional[int] = None,
-    pi_layers: Optional[List[int]] = None,
-    vf_layers: Optional[List[int]] = None,
-    config_manager: Optional[ConfigManager] = None
+    config_manager: ConfigManager
 ) -> Dict[str, Any]:
     """
     Create policy kwargs for MaskablePPO model.
     
     Args:
-        features_dim: Output dimension of the CNN features extractor
-        pi_layers: Layer sizes for the policy network head
-        vf_layers: Layer sizes for the value network head
-        config_manager: ConfigManager instance for configuration (preferred)
+        config_manager: ConfigManager instance containing all configuration
         
     Returns:
         Dictionary containing policy kwargs for MaskablePPO
+        
+    Raises:
+        ValueError: If config_manager is None or contains None values
     """
-    # Get values from ConfigManager if provided, otherwise use parameters or defaults
-    if config_manager is not None:
-        net_arch = config_manager.config.network_architecture
-        final_features_dim = features_dim if features_dim is not None else net_arch.features_dim
-        final_pi_layers = pi_layers if pi_layers is not None else net_arch.pi_layers
-        final_vf_layers = vf_layers if vf_layers is not None else net_arch.vf_layers
-    else:
-        # Use provided parameters or defaults
-        final_features_dim = features_dim if features_dim is not None else 128
-        final_pi_layers = pi_layers if pi_layers is not None else [64, 64]
-        final_vf_layers = vf_layers if vf_layers is not None else [256, 256]
+    if config_manager is None:
+        raise ValueError("config_manager is required")
+    
+    net_arch = config_manager.config.network_architecture
+    
+    # Validate that ConfigManager has all required values
+    required_values = ['features_dim', 'pi_layers', 'vf_layers']
+    for attr in required_values:
+        if getattr(net_arch, attr) is None:
+            raise ValueError(f"ConfigManager.network_architecture.{attr} is None. "
+                           f"ConfigManager must provide all default values.")
     
     return {
         'features_extractor_class': CustomCNN,
-        'features_extractor_kwargs': {'features_dim': final_features_dim},
-        'net_arch': {'pi': final_pi_layers, 'vf': final_vf_layers}
+        'features_extractor_kwargs': {'features_dim': net_arch.features_dim},
+        'net_arch': {'pi': net_arch.pi_layers, 'vf': net_arch.vf_layers}
     }
 
 
 def create_new_model(
     env,
-    n_steps: Optional[int] = None,
-    batch_size: Optional[int] = None, 
-    n_epochs: Optional[int] = None,
-    learning_rate: Optional[float] = None,
-    ent_coef: Optional[float] = None,
-    gamma: Optional[float] = None,
-    gae_lambda: Optional[float] = None,
-    clip_range: Optional[float] = None,
-    vf_coef: Optional[float] = None,
-    device: Optional[str] = None,
-    seed: Optional[int] = None,
-    tensorboard_log: Optional[str] = None,
-    policy_kwargs: Optional[Dict[str, Any]] = None,
-    config_manager: Optional[ConfigManager] = None,
-    **kwargs
+    config_manager: ConfigManager,
+    tensorboard_log: Optional[str] = None
 ) -> MaskablePPO:
     """
     Create a new MaskablePPO model with specified configuration.
     
     Args:
         env: Training environment
-        n_steps: Number of steps per environment per update
-        batch_size: Minibatch size
-        n_epochs: Number of optimization epochs per update
-        learning_rate: Learning rate
-        ent_coef: Entropy coefficient
-        gamma: Discount factor
-        gae_lambda: Factor for Generalized Advantage Estimation
-        clip_range: Clipping parameter for PPO
-        vf_coef: Value function coefficient in the loss calculation
-        device: Device to use for training (auto, cpu, cuda)
-        seed: Random seed for reproducibility
-        tensorboard_log: Path for tensorboard logging
-        policy_kwargs: Policy configuration kwargs
-        config_manager: ConfigManager instance for configuration (preferred)
-        **kwargs: Additional arguments (ignored)
+        config_manager: ConfigManager instance containing all configuration
+        tensorboard_log: Path for tensorboard logging (optional)
         
     Returns:
         Configured MaskablePPO model
+        
+    Raises:
+        ValueError: If config_manager is None or incomplete
     """
-    # Get values from ConfigManager if provided, otherwise use parameters
-    if config_manager is not None:
-        model_hyperparams = config_manager.config.model_hyperparams
-        training_execution = config_manager.config.training_execution
-        
-        final_n_steps = n_steps if n_steps is not None else model_hyperparams.n_steps
-        final_batch_size = batch_size if batch_size is not None else model_hyperparams.batch_size
-        final_n_epochs = n_epochs if n_epochs is not None else model_hyperparams.n_epochs
-        final_learning_rate = learning_rate if learning_rate is not None else model_hyperparams.learning_rate
-        final_ent_coef = ent_coef if ent_coef is not None else model_hyperparams.ent_coef
-        final_gamma = gamma if gamma is not None else model_hyperparams.gamma
-        final_gae_lambda = gae_lambda if gae_lambda is not None else model_hyperparams.gae_lambda
-        final_clip_range = clip_range if clip_range is not None else model_hyperparams.clip_range
-        final_vf_coef = vf_coef if vf_coef is not None else model_hyperparams.vf_coef
-        final_device = device if device is not None else training_execution.device
-        final_seed = seed if seed is not None else training_execution.seed
-    else:
-        # Ensure all required parameters are provided when not using ConfigManager
-        if any(param is None for param in [n_steps, batch_size, n_epochs, learning_rate, ent_coef, 
-                                         gamma, gae_lambda, clip_range, vf_coef, device]):
-            raise ValueError("All model parameters must be provided when config_manager is None")
-        
-        final_n_steps = n_steps
-        final_batch_size = batch_size
-        final_n_epochs = n_epochs
-        final_learning_rate = learning_rate
-        final_ent_coef = ent_coef
-        final_gamma = gamma
-        final_gae_lambda = gae_lambda
-        final_clip_range = clip_range
-        final_vf_coef = vf_coef
-        final_device = device
-        final_seed = seed
+    if config_manager is None:
+        raise ValueError("config_manager is required")
+    
+    model_hyperparams = config_manager.config.model_hyperparams
+    training_execution = config_manager.config.training_execution
+    
+    # Validate that ConfigManager has all required values
+    required_model_params = ['n_steps', 'batch_size', 'n_epochs', 'learning_rate', 'ent_coef', 
+                            'gamma', 'gae_lambda', 'clip_range', 'vf_coef']
+    for attr in required_model_params:
+        if getattr(model_hyperparams, attr) is None:
+            raise ValueError(f"ConfigManager.model_hyperparams.{attr} is None. "
+                           f"ConfigManager must provide all default values.")
+    
+    required_execution_params = ['device']
+    for attr in required_execution_params:
+        if getattr(training_execution, attr) is None:
+            raise ValueError(f"ConfigManager.training_execution.{attr} is None. "
+                           f"ConfigManager must provide all default values.")
+    
+    # Create policy kwargs
+    policy_kwargs = create_policy_kwargs(config_manager=config_manager)
     
     # Create model arguments
     model_args = {
         'policy': "CnnPolicy",
         'env': env,
         'verbose': 1,
-        'n_steps': final_n_steps,
-        'batch_size': final_batch_size,
-        'n_epochs': final_n_epochs,
-        'learning_rate': final_learning_rate,
-        'ent_coef': final_ent_coef,
-        'gamma': final_gamma,
-        'gae_lambda': final_gae_lambda,
-        'clip_range': final_clip_range,
-        'vf_coef': final_vf_coef,
-        'device': final_device,
-        'seed': final_seed
+        'n_steps': model_hyperparams.n_steps,
+        'batch_size': model_hyperparams.batch_size,
+        'n_epochs': model_hyperparams.n_epochs,
+        'learning_rate': model_hyperparams.learning_rate,
+        'ent_coef': model_hyperparams.ent_coef,
+        'gamma': model_hyperparams.gamma,
+        'gae_lambda': model_hyperparams.gae_lambda,
+        'clip_range': model_hyperparams.clip_range,
+        'vf_coef': model_hyperparams.vf_coef,
+        'device': training_execution.device,
+        'seed': training_execution.seed,
+        'policy_kwargs': policy_kwargs
     }
-    
-    # Add policy kwargs if provided
-    if policy_kwargs is not None:
-        model_args['policy_kwargs'] = policy_kwargs
     
     # Add tensorboard logging if specified
     if tensorboard_log is not None:
@@ -237,15 +197,10 @@ def load_vecnormalize_stats(
 
 def create_model(
     env,
-    device: str = 'cpu',
+    config_manager: ConfigManager,
     checkpoint_path: Optional[str] = None,
     vecnormalize_stats_path: Optional[str] = None,
-    tensorboard_log: Optional[str] = None,
-    features_dim: Optional[int] = None,
-    pi_layers: Optional[List[int]] = None,
-    vf_layers: Optional[List[int]] = None,
-    config_manager: Optional[ConfigManager] = None,
-    **model_config
+    tensorboard_log: Optional[str] = None
 ) -> Tuple[MaskablePPO, Any]:
     """
     Unified model creation function.
@@ -255,28 +210,28 @@ def create_model(
     
     Args:
         env: Environment for the model
-        device: Device to use (auto, cpu, cuda)
+        config_manager: ConfigManager instance containing all configuration
         checkpoint_path: Path to checkpoint (if loading from checkpoint)
         vecnormalize_stats_path: Path to VecNormalize stats file
         tensorboard_log: Path for tensorboard logging
-        features_dim: CNN features dimension
-        pi_layers: Policy network layer sizes
-        vf_layers: Value network layer sizes
-        config_manager: ConfigManager instance for configuration (preferred)
-        **model_config: Additional model configuration parameters
         
     Returns:
         Tuple of (model, environment) where environment may be updated with stats
         
     Raises:
         ModelCreationError: If model creation fails
+        ValueError: If config_manager is None
     """
+    if config_manager is None:
+        raise ValueError("config_manager is required")
+    
     try:
         # Load VecNormalize stats if available (do this first)
         updated_env = load_vecnormalize_stats(env, vecnormalize_stats_path)
         
         if checkpoint_path is not None:
             # Load from checkpoint
+            device = config_manager.config.training_execution.device
             model = load_model_from_checkpoint(
                 checkpoint_path=checkpoint_path,
                 env=updated_env,
@@ -285,28 +240,16 @@ def create_model(
             )
         else:
             # Create new model
-            # First create policy kwargs
-            policy_kwargs = create_policy_kwargs(
-                features_dim=features_dim,
-                pi_layers=pi_layers,
-                vf_layers=vf_layers,
-                config_manager=config_manager
-            )
-            
-            # Create the model
             model = create_new_model(
                 env=updated_env,
-                device=device,
-                tensorboard_log=tensorboard_log,
-                policy_kwargs=policy_kwargs,
                 config_manager=config_manager,
-                **model_config
+                tensorboard_log=tensorboard_log
             )
         
         return model, updated_env
         
     except Exception as e:
-        if isinstance(e, ModelCreationError):
+        if isinstance(e, (ModelCreationError, ValueError)):
             raise
         else:
             raise ModelCreationError(f"Failed to create model: {str(e)}") from e
@@ -341,61 +284,49 @@ def get_model_summary(model: MaskablePPO) -> Dict[str, Any]:
 # For backward compatibility and convenience
 def create_training_model(
     env,
-    tensorboard_log: str,
-    features_dim: Optional[int] = None,
-    pi_layers: Optional[List[int]] = None,
-    vf_layers: Optional[List[int]] = None,
-    config_manager: Optional[ConfigManager] = None,
-    **training_args
+    config_manager: ConfigManager,
+    tensorboard_log: Optional[str] = None
 ) -> MaskablePPO:
     """
     Convenience function for creating training models.
     
     Args:
         env: Training environment
+        config_manager: ConfigManager instance containing all configuration
         tensorboard_log: Path for tensorboard logging
-        features_dim: CNN features dimension
-        pi_layers: Policy network layer sizes
-        vf_layers: Value network layer sizes
-        config_manager: ConfigManager instance for configuration (preferred)
-        **training_args: Training configuration arguments
         
     Returns:
         Configured MaskablePPO model for training
     """
     model, _ = create_model(
         env=env,
-        tensorboard_log=tensorboard_log,
-        features_dim=features_dim,
-        pi_layers=pi_layers,
-        vf_layers=vf_layers,
         config_manager=config_manager,
-        **training_args
+        tensorboard_log=tensorboard_log
     )
     return model
 
 
 def create_inference_model(
     env,
+    config_manager: ConfigManager,
     checkpoint_path: str,
-    vecnormalize_stats_path: Optional[str] = None,
-    device: str = 'cpu'
+    vecnormalize_stats_path: Optional[str] = None
 ) -> Tuple[MaskablePPO, Any]:
     """
     Convenience function for creating inference models.
     
     Args:
         env: Environment for inference
+        config_manager: ConfigManager instance containing all configuration
         checkpoint_path: Path to model checkpoint
         vecnormalize_stats_path: Path to VecNormalize stats file
-        device: Device to use for inference
         
     Returns:
         Tuple of (model, environment) ready for inference
     """
     return create_model(
         env=env,
+        config_manager=config_manager,
         checkpoint_path=checkpoint_path,
-        vecnormalize_stats_path=vecnormalize_stats_path,
-        device=device
+        vecnormalize_stats_path=vecnormalize_stats_path
     )

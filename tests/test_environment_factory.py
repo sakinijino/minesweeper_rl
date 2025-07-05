@@ -25,9 +25,10 @@ from src.config.config_schemas import EnvironmentConfig
 class TestEnvConfig:
     """Test environment configuration creation."""
     
-    def test_create_env_config_default_values(self):
-        """Test creating environment config with default values."""
-        config = create_env_config()
+    def test_create_env_config_from_config_manager(self):
+        """Test creating environment config from ConfigManager with default values."""
+        config_manager = ConfigManager()
+        config = create_env_config(config_manager=config_manager)
         
         assert config is not None
         assert 'width' in config
@@ -38,74 +39,45 @@ class TestEnvConfig:
         assert 'reward_reveal' in config
         assert 'reward_invalid' in config
         assert 'max_reward_per_step' in config
+        assert 'render_mode' in config
         
-        # Check that all values are numeric (except render_mode and max_reward_per_step which can be None)
+        # All values should be non-None (ConfigManager must provide defaults)
         for key, value in config.items():
-            if key not in ['render_mode', 'max_reward_per_step']:
-                assert isinstance(value, (int, float)), f"Key {key} has value {value} of type {type(value)}"
-            elif key == 'max_reward_per_step':
-                assert value is None or isinstance(value, (int, float)), f"max_reward_per_step should be None or numeric, got {value}"
+            if key != 'render_mode':  # render_mode can be None
+                assert value is not None, f"ConfigManager should provide non-None default for {key}"
     
-    def test_create_env_config_custom_values(self):
-        """Test creating environment config with custom values."""
-        config = create_env_config(
-            width=10,
-            height=8,
-            n_mines=15,
-            reward_win=100.0,
-            reward_lose=-10.0,
-            reward_reveal=1.0,
-            reward_invalid=-1.0,
-            max_reward_per_step=5.0,
-            render_mode='human'
-        )
+    def test_create_env_config_with_render_mode(self):
+        """Test creating environment config with custom render mode."""
+        config_manager = ConfigManager()
+        config = create_env_config(config_manager=config_manager, render_mode='human')
         
-        assert config['width'] == 10
-        assert config['height'] == 8
-        assert config['n_mines'] == 15
-        assert config['reward_win'] == 100.0
-        assert config['reward_lose'] == -10.0
-        assert config['reward_reveal'] == 1.0
-        assert config['reward_invalid'] == -1.0
-        assert config['max_reward_per_step'] == 5.0
         assert config['render_mode'] == 'human'
+        # Other values should come from ConfigManager
+        assert config['width'] == config_manager.config.environment_config.width
+        assert config['height'] == config_manager.config.environment_config.height
     
-    def test_create_env_config_from_args(self):
-        """Test creating environment config from args object."""
-        mock_args = Mock()
-        mock_args.width = 12
-        mock_args.height = 12
-        mock_args.n_mines = 20
-        mock_args.reward_win = 50.0
-        mock_args.reward_lose = -5.0
-        mock_args.reward_reveal = 0.5
-        mock_args.reward_invalid = -0.5
-        mock_args.max_reward_per_step = 3.0
+    def test_create_env_config_missing_config_manager(self):
+        """Test that factory requires ConfigManager."""
+        with pytest.raises(TypeError):
+            create_env_config()
+    
+    def test_create_env_config_incomplete_config_manager(self):
+        """Test that factory validates ConfigManager completeness."""
+        config_manager = ConfigManager()
+        # Intentionally set a required value to None
+        config_manager.config.environment_config.width = None
         
-        config = create_env_config(args=mock_args, render_mode='rgb_array')
-        
-        assert config['width'] == 12
-        assert config['height'] == 12
-        assert config['n_mines'] == 20
-        assert config['render_mode'] == 'rgb_array'
+        with pytest.raises(ValueError, match="ConfigManager.environment_config.width is None"):
+            create_env_config(config_manager=config_manager)
 
 
 class TestBaseEnvironment:
     """Test base environment creation."""
     
-    def test_create_base_environment_with_config(self):
-        """Test creating base environment with configuration."""
-        config = {
-            'width': 5,
-            'height': 5,
-            'n_mines': 3,
-            'reward_win': 10.0,
-            'reward_lose': -10.0,
-            'reward_reveal': 1.0,
-            'reward_invalid': -1.0,
-            'max_reward_per_step': 2.0,
-            'render_mode': None
-        }
+    def test_create_base_environment_success(self):
+        """Test successful creation of base environment."""
+        config_manager = ConfigManager()
+        config = create_env_config(config_manager=config_manager)
         
         with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
             mock_env = Mock()
@@ -118,7 +90,8 @@ class TestBaseEnvironment:
     
     def test_create_base_environment_with_custom_render_mode(self):
         """Test creating base environment with custom render mode."""
-        config = create_env_config(render_mode='human')
+        config_manager = ConfigManager()
+        config = create_env_config(config_manager=config_manager, render_mode='human')
         
         with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
             mock_env = Mock()
@@ -130,26 +103,10 @@ class TestBaseEnvironment:
             call_kwargs = mock_env_class.call_args[1]
             assert call_kwargs['render_mode'] == 'human'
     
-    def test_create_env_config_from_config_manager(self):
-        """Test creating environment config from ConfigManager."""
-        config_manager = ConfigManager()
-        config_manager.config.environment_config.width = 10
-        config_manager.config.environment_config.height = 8
-        config_manager.config.environment_config.n_mines = 15
-        config_manager.config.environment_config.reward_win = 100.0
-        
-        # Test the new interface we'll add
-        config = create_env_config(config_manager=config_manager, render_mode='human')
-        
-        assert config['width'] == 10
-        assert config['height'] == 8
-        assert config['n_mines'] == 15
-        assert config['reward_win'] == 100.0
-        assert config['render_mode'] == 'human'
-    
     def test_create_base_environment_error_handling(self):
         """Test error handling in base environment creation."""
-        config = create_env_config()
+        config_manager = ConfigManager()
+        config = create_env_config(config_manager=config_manager)
         
         with patch('src.factories.environment_factory.MinesweeperEnv') as mock_env_class:
             mock_env_class.side_effect = Exception("Environment creation failed")
@@ -305,21 +262,9 @@ class TestVecNormalizeHandling:
 class TestTrainingEnvironment:
     """Test training environment creation."""
     
-    def test_create_training_environment_default(self):
-        """Test creating training environment with default settings."""
-        mock_args = Mock()
-        mock_args.width = 5
-        mock_args.height = 5
-        mock_args.n_mines = 3
-        mock_args.reward_win = 10.0
-        mock_args.reward_lose = -10.0
-        mock_args.reward_reveal = 1.0
-        mock_args.reward_invalid = -1.0
-        mock_args.max_reward_per_step = 2.0
-        mock_args.n_envs = 4
-        mock_args.vec_env_type = 'subproc'
-        mock_args.seed = None
-        mock_args.gamma = 0.99
+    def test_create_training_environment_success(self):
+        """Test creating training environment with ConfigManager."""
+        config_manager = ConfigManager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -328,7 +273,7 @@ class TestTrainingEnvironment:
                 mock_create_vec.return_value = mock_vec_env
                 mock_vecnorm.return_value = mock_normalized_env
                 
-                env = create_training_environment(mock_args)
+                env = create_training_environment(config_manager)
                 
                 assert env == mock_normalized_env
                 mock_create_vec.assert_called_once()
@@ -337,7 +282,7 @@ class TestTrainingEnvironment:
                     norm_obs=False,
                     norm_reward=True,
                     clip_obs=10.0,
-                    gamma=0.99
+                    gamma=config_manager.config.model_hyperparams.gamma
                 )
     
     def test_create_training_environment_with_stats(self, temp_dir):
@@ -345,19 +290,7 @@ class TestTrainingEnvironment:
         stats_path = os.path.join(temp_dir, "stats.pkl")
         Path(stats_path).touch()
         
-        mock_args = Mock()
-        mock_args.width = 5
-        mock_args.height = 5
-        mock_args.n_mines = 3
-        mock_args.reward_win = 10.0
-        mock_args.reward_lose = -10.0
-        mock_args.reward_reveal = 1.0
-        mock_args.reward_invalid = -1.0
-        mock_args.max_reward_per_step = 2.0
-        mock_args.n_envs = 1
-        mock_args.vec_env_type = 'dummy'
-        mock_args.seed = 42
-        mock_args.gamma = 0.95
+        config_manager = ConfigManager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -371,7 +304,7 @@ class TestTrainingEnvironment:
                     mock_load_stats.return_value = mock_stats_env
                     
                     env = create_training_environment(
-                        mock_args, 
+                        config_manager, 
                         vecnormalize_stats_path=stats_path
                     )
                     
@@ -382,36 +315,10 @@ class TestTrainingEnvironment:
                         training_mode=True
                     )
     
-    def test_create_training_environment_with_config_manager(self):
-        """Test creating training environment with ConfigManager."""
-        config_manager = ConfigManager()
-        config_manager.config.environment_config.width = 8
-        config_manager.config.environment_config.height = 8
-        config_manager.config.environment_config.n_mines = 12
-        config_manager.config.training_execution.n_envs = 2
-        config_manager.config.training_execution.vec_env_type = 'dummy'
-        config_manager.config.training_execution.seed = 123
-        config_manager.config.model_hyperparams.gamma = 0.95
-        
-        with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
-            with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
-                mock_vec_env = Mock()
-                mock_normalized_env = Mock()
-                mock_create_vec.return_value = mock_vec_env
-                mock_vecnorm.return_value = mock_normalized_env
-                
-                # Test the new interface we'll add
-                env = create_training_environment(config_manager=config_manager)
-                
-                assert env == mock_normalized_env
-                mock_create_vec.assert_called_once()
-                mock_vecnorm.assert_called_once_with(
-                    mock_vec_env,
-                    norm_obs=False,
-                    norm_reward=True,
-                    clip_obs=10.0,
-                    gamma=0.95
-                )
+    def test_create_training_environment_missing_config_manager(self):
+        """Test that training environment requires ConfigManager."""
+        with pytest.raises(TypeError):
+            create_training_environment()
 
 
 class TestInferenceEnvironment:
@@ -419,23 +326,14 @@ class TestInferenceEnvironment:
     
     def test_create_inference_environment_batch_mode(self):
         """Test creating inference environment for batch mode."""
-        mock_args = Mock()
-        mock_args.width = 8
-        mock_args.height = 8
-        mock_args.n_mines = 10
-        mock_args.reward_win = 20.0
-        mock_args.reward_lose = -20.0
-        mock_args.reward_reveal = 2.0
-        mock_args.reward_invalid = -2.0
-        mock_args.max_reward_per_step = 5.0
-        mock_args.seed = 123
+        config_manager = ConfigManager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             mock_vec_env = Mock()
             mock_create_vec.return_value = mock_vec_env
             
             env, raw_env = create_inference_environment(
-                mock_args, 
+                config_manager, 
                 mode='batch'
             )
             
@@ -448,18 +346,10 @@ class TestInferenceEnvironment:
             assert call_args[1]['n_envs'] == 1
     
     def test_create_inference_environment_interactive_mode(self):
-        """Test creating inference environment for interactive mode."""
-        mock_args = Mock()
-        mock_args.width = 6
-        mock_args.height = 6
-        mock_args.n_mines = 8
-        mock_args.reward_win = 15.0
-        mock_args.reward_lose = -15.0
-        mock_args.reward_reveal = 1.5
-        mock_args.reward_invalid = -1.5
-        mock_args.max_reward_per_step = 3.0
-        mock_args.seed = 456
+        """Test creating inference environment for interactive mode (human/agent)."""
+        config_manager = ConfigManager()
         
+        # Test human mode
         with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
             with patch('src.factories.environment_factory.DummyVecEnv') as mock_dummy_vec:
                 mock_base_env = Mock()
@@ -468,8 +358,26 @@ class TestInferenceEnvironment:
                 mock_dummy_vec.return_value = mock_vec_env
                 
                 env, raw_env = create_inference_environment(
-                    mock_args, 
-                    mode='interactive'
+                    config_manager, 
+                    mode='human'
+                )
+                
+                assert env == mock_vec_env
+                assert raw_env == mock_base_env
+                mock_create_base.assert_called_once()
+                mock_dummy_vec.assert_called_once()
+        
+        # Test agent mode  
+        with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
+            with patch('src.factories.environment_factory.DummyVecEnv') as mock_dummy_vec:
+                mock_base_env = Mock()
+                mock_vec_env = Mock()
+                mock_create_base.return_value = mock_base_env
+                mock_dummy_vec.return_value = mock_vec_env
+                
+                env, raw_env = create_inference_environment(
+                    config_manager, 
+                    mode='agent'
                 )
                 
                 assert env == mock_vec_env
@@ -482,16 +390,7 @@ class TestInferenceEnvironment:
         stats_path = os.path.join(temp_dir, "inference_stats.pkl")
         Path(stats_path).touch()
         
-        mock_args = Mock()
-        mock_args.width = 5
-        mock_args.height = 5
-        mock_args.n_mines = 3
-        mock_args.reward_win = 10.0
-        mock_args.reward_lose = -10.0
-        mock_args.reward_reveal = 1.0
-        mock_args.reward_invalid = -1.0
-        mock_args.max_reward_per_step = 2.0
-        mock_args.seed = None
+        config_manager = ConfigManager()
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.load_vecnormalize_stats') as mock_load_stats:
@@ -501,7 +400,7 @@ class TestInferenceEnvironment:
                 mock_load_stats.return_value = mock_stats_env
                 
                 env, raw_env = create_inference_environment(
-                    mock_args,
+                    config_manager,
                     mode='batch',
                     vecnormalize_stats_path=stats_path
                 )
@@ -513,6 +412,11 @@ class TestInferenceEnvironment:
                     training_mode=False,
                     norm_reward=False
                 )
+    
+    def test_create_inference_environment_missing_config_manager(self):
+        """Test that inference environment requires ConfigManager."""
+        with pytest.raises(TypeError):
+            create_inference_environment(mode='batch')
 
 
 class TestSeedHandling:
@@ -520,19 +424,19 @@ class TestSeedHandling:
     
     def test_seed_handling_in_vectorized_env(self):
         """Test that seed is properly passed to vectorized environment."""
-        mock_args = Mock()
-        mock_args.width = 5
-        mock_args.height = 5
-        mock_args.n_mines = 3
-        mock_args.reward_win = 10.0
-        mock_args.reward_lose = -10.0
-        mock_args.reward_reveal = 1.0
-        mock_args.reward_invalid = -1.0
-        mock_args.max_reward_per_step = 2.0
-        mock_args.n_envs = 2
-        mock_args.vec_env_type = 'dummy'
-        mock_args.seed = 789
-        mock_args.gamma = 0.99
+        config_manager = ConfigManager()
+        config_manager.config.environment_config.width = 5
+        config_manager.config.environment_config.height = 5
+        config_manager.config.environment_config.n_mines = 3
+        config_manager.config.environment_config.reward_win = 10.0
+        config_manager.config.environment_config.reward_lose = -10.0
+        config_manager.config.environment_config.reward_reveal = 1.0
+        config_manager.config.environment_config.reward_invalid = -1.0
+        config_manager.config.environment_config.max_reward_per_step = 2.0
+        config_manager.config.training_execution.n_envs = 2
+        config_manager.config.training_execution.vec_env_type = 'dummy'
+        config_manager.config.training_execution.seed = 789
+        config_manager.config.model_hyperparams.gamma = 0.99
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -541,7 +445,7 @@ class TestSeedHandling:
                 mock_create_vec.return_value = mock_vec_env
                 mock_vecnorm.return_value = mock_normalized_env
                 
-                env = create_training_environment(mock_args)
+                env = create_training_environment(config_manager)
                 
                 # Check that seed was passed to vectorized environment creation
                 call_kwargs = mock_create_vec.call_args[1]
@@ -593,19 +497,15 @@ class TestIntegrationScenarios:
     
     def test_train_py_workflow_simulation(self):
         """Test simulating the train.py environment creation workflow."""
-        mock_args = Mock()
-        mock_args.width = 10
-        mock_args.height = 10
-        mock_args.n_mines = 15
-        mock_args.reward_win = 100.0
-        mock_args.reward_lose = -100.0
-        mock_args.reward_reveal = 1.0
-        mock_args.reward_invalid = -1.0
-        mock_args.max_reward_per_step = 10.0
-        mock_args.n_envs = 8
-        mock_args.vec_env_type = 'subproc'
-        mock_args.seed = 42
-        mock_args.gamma = 0.99
+        config_manager = ConfigManager()
+        # Set custom training configuration
+        config_manager.config.environment_config.width = 10
+        config_manager.config.environment_config.height = 10
+        config_manager.config.environment_config.n_mines = 15
+        config_manager.config.training_execution.n_envs = 8
+        config_manager.config.training_execution.vec_env_type = 'subproc'
+        config_manager.config.training_execution.seed = 42
+        config_manager.config.model_hyperparams.gamma = 0.99
         
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             with patch('src.factories.environment_factory.VecNormalize') as mock_vecnorm:
@@ -614,33 +514,30 @@ class TestIntegrationScenarios:
                 mock_create_vec.return_value = mock_vec_env
                 mock_vecnorm.return_value = mock_normalized_env
                 
-                env = create_training_environment(mock_args)
+                env = create_training_environment(config_manager)
                 
                 assert env == mock_normalized_env
                 # Verify training-specific VecNormalize settings
                 vecnorm_call = mock_vecnorm.call_args[1]
                 assert vecnorm_call['norm_obs'] == False
                 assert vecnorm_call['norm_reward'] == True
+                assert vecnorm_call['gamma'] == 0.99
     
     def test_play_py_workflow_simulation(self):
         """Test simulating the play.py environment creation workflow."""
-        mock_args = Mock()
-        mock_args.width = 8
-        mock_args.height = 8
-        mock_args.n_mines = 12
-        mock_args.reward_win = 50.0
-        mock_args.reward_lose = -50.0
-        mock_args.reward_reveal = 0.5
-        mock_args.reward_invalid = -0.5
-        mock_args.max_reward_per_step = 5.0
-        mock_args.seed = 123
+        config_manager = ConfigManager()
+        # Set custom play configuration
+        config_manager.config.environment_config.width = 8
+        config_manager.config.environment_config.height = 8
+        config_manager.config.environment_config.n_mines = 12
+        config_manager.config.training_execution.seed = 123
         
         # Test batch mode
         with patch('src.factories.environment_factory.create_vectorized_environment') as mock_create_vec:
             mock_vec_env = Mock()
             mock_create_vec.return_value = mock_vec_env
             
-            env, raw_env = create_inference_environment(mock_args, mode='batch')
+            env, raw_env = create_inference_environment(config_manager, mode='batch')
             
             assert env == mock_vec_env
             assert raw_env is None
@@ -650,7 +547,7 @@ class TestIntegrationScenarios:
             assert call_kwargs['n_envs'] == 1
             assert call_kwargs['vec_env_type'] == 'dummy'
         
-        # Test interactive mode
+        # Test human mode
         with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
             with patch('src.factories.environment_factory.DummyVecEnv') as mock_dummy_vec:
                 mock_base_env = Mock()
@@ -658,7 +555,7 @@ class TestIntegrationScenarios:
                 mock_create_base.return_value = mock_base_env
                 mock_dummy_vec.return_value = mock_vec_env
                 
-                env, raw_env = create_inference_environment(mock_args, mode='interactive')
+                env, raw_env = create_inference_environment(config_manager, mode='human')
                 
                 assert env == mock_vec_env
                 assert raw_env == mock_base_env
