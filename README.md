@@ -73,6 +73,31 @@ python play.py --mode human --width 8 --height 8 --n_mines 12
 python play.py --mode agent --config ./configs/my_config.json
 ```
 
+### Continue Training
+
+```bash
+# Resume from latest checkpoint (automatically loads saved config)
+python train.py --continue_from ./training_runs/your_run_directory/
+
+# Resume from specific step
+python train.py --continue_from ./training_runs/your_run_directory/ --continue_steps 100000
+
+# Resume training but override specific hyperparameters
+python train.py --continue_from ./training_runs/your_run_directory/ \
+  --learning_rate 1e-5 --total_timesteps 3_000_000
+
+# Resume with different environment settings
+python train.py --continue_from ./training_runs/your_run_directory/ \
+  --width 20 --height 20 --n_mines 60 --n_envs 12
+```
+
+### Monitoring
+
+```bash
+# View training progress
+tensorboard --logdir ./training_runs/
+```
+
 ## Key Features
 
 - **Custom Gymnasium Environment**: Full Minesweeper game logic with action masking
@@ -111,13 +136,6 @@ python play.py --mode agent --config ./configs/my_config.json
 | `--training_run_dir` | Load latest model from experiment directory | `--training_run_dir ./training_runs/` |
 | `--config` | Load from configuration file | `--config ./configs/my_config.json` |
 
-## Monitoring
-
-```bash
-# View training progress
-tensorboard --logdir ./training_runs/
-```
-
 ## Configuration System
 
 The new configuration system uses YAML/JSON files with a parameter priority system:
@@ -149,24 +167,6 @@ python train.py --continue_from ./training_runs/your_run/ --config configs/local
 - Environment settings (grid size, mines, rewards)
 - Training execution parameters (timesteps, checkpoints, device, etc.)
 - Paths configuration (experiment directory, model prefix)
-
-## Continue Training
-
-```bash
-# Resume from latest checkpoint (automatically loads saved config)
-python train.py --continue_from ./training_runs/your_run_directory/
-
-# Resume from specific step
-python train.py --continue_from ./training_runs/your_run_directory/ --continue_steps 100000
-
-# Resume training but override specific hyperparameters
-python train.py --continue_from ./training_runs/your_run_directory/ \
-  --learning_rate 1e-5 --total_timesteps 3_000_000
-
-# Resume with different environment settings
-python train.py --continue_from ./training_runs/your_run_directory/ \
-  --width 20 --height 20 --n_mines 60 --n_envs 12
-```
 
 ## Project Structure
 
