@@ -11,6 +11,12 @@ A reinforcement learning agent that plays Minesweeper using MaskablePPO and a cu
 git clone <your-repository-url>
 cd minesweeper_rl
 
+# Create a Virtual Environment (Recommended):**
+python -m venv .venv
+# Activate the environment
+source .venv/bin/activate # on macos/linux
+# .venv\Scripts\activate # on windows
+
 # Install dependencies
 pip install -r requirements.txt
 ```
