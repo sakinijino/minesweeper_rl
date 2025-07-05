@@ -58,18 +58,21 @@ python train.py \
 ### Playing
 
 ```bash
-# Watch AI play (automatically loads saved config from training run)
-python play.py --mode agent --training_run_dir ./training_runs/your_run_directory/
+# Watch AI play with specific model directory
+python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/
+
+# Watch AI play with latest experiment from training_runs/
+python play.py --mode agent --training_run_dir ./training_runs/
 
 # AI batch evaluation (no visualization)  
-python play.py --mode batch --num_episodes 100 --training_run_dir ./training_runs/your_run_directory/
+python play.py --mode batch --num_episodes 100 --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/
 
 # Override environment settings while using saved model
-python play.py --mode agent --training_run_dir ./training_runs/your_run_directory/ \
+python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
   --width 10 --height 10 --n_mines 15 --delay 0.5
 
 # Use specific checkpoint step
-python play.py --mode batch --training_run_dir ./training_runs/your_run_directory/ \
+python play.py --mode batch --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
   --checkpoint_steps 500000 --num_episodes 50
 
 # Human play with custom environment
@@ -108,6 +111,14 @@ python play.py --mode agent --config ./configs/my_config.json
 | `agent` | AI plays with visualization | `--mode agent` |
 | `batch` | AI evaluation without graphics | `--mode batch` |
 | `human` | Human player with mouse input | `--mode human` |
+
+## Model Loading Options
+
+| Parameter | Description | Usage |
+|-----------|-------------|-------|
+| `--model_dir` | Load from specific model directory | `--model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/` |
+| `--training_run_dir` | Load latest model from experiment directory | `--training_run_dir ./training_runs/` |
+| `--config` | Load from configuration file | `--config ./configs/my_config.json` |
 
 ## Monitoring
 

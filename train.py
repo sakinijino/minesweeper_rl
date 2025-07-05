@@ -216,7 +216,7 @@ def create_training_directories(config_manager, continue_training, original_run_
     if continue_training and original_run_dir:
         # For continue training, create a new timestamped directory
         original_run_name = os.path.basename(os.path.normpath(original_run_dir))
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         run_name = f"{original_run_name}_continue_{timestamp}"
         run_dir = os.path.join(config.paths_config.experiment_base_dir, run_name)
         print(f"Continuing training in new directory: {run_dir}")
@@ -230,7 +230,7 @@ def create_training_directories(config_manager, continue_training, original_run_
         if config.training_execution.seed is not None:
             run_name_parts.append(f"seed{config.training_execution.seed}")
         
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         run_name_parts.append(timestamp)
 
         run_name = "_".join(run_name_parts)

@@ -40,8 +40,10 @@ def setup_argument_parser():
                         help="Play mode: agent (AI with visualization), batch (AI without visualization), human (human player)")
     
     # Model and configuration loading
+    parser.add_argument("--model_dir", type=str, default=None, 
+                        help="Specific model directory (complete path with timestamp)")
     parser.add_argument("--training_run_dir", type=str, default=None, 
-                        help="Directory to training run (will auto-load config and find best checkpoint)")
+                        help="Experiment directory to find latest training run")
     parser.add_argument("--config", type=str, default=None, 
                         help="Path to configuration file (JSON format)")
     parser.add_argument("--checkpoint_steps", type=int, default=None, 
@@ -93,24 +95,50 @@ def load_and_setup_play_config(args):
     model_path = None
     stats_path = None
     
-    # Load configuration from training run if specified
-    if args.training_run_dir:
+    # Validate mutually exclusive arguments
+    if args.model_dir and args.training_run_dir:
+        print("Error: Cannot specify both --model_dir and --training_run_dir")
+        exit(1)
+    
+    # Load configuration from specific model directory
+    if args.model_dir:
         try:
             # Load training configuration
-            config_manager.load_from_training_run(args.training_run_dir)
-            print(f"Loaded configuration from training run: {args.training_run_dir}")
+            config_manager.load_from_training_run(args.model_dir)
+            print(f"Loaded configuration from model directory: {args.model_dir}")
             
             # Find model and stats paths
-            model_path, stats_path = resolve_model_paths_from_run_dir(args.training_run_dir, args.checkpoint_steps)
+            model_path, stats_path = resolve_model_paths_from_run_dir(args.model_dir, args.checkpoint_steps)
             
         except FileNotFoundError:
-            print(f"Warning: No training config found in {args.training_run_dir}")
+            print(f"Warning: No training config found in {args.model_dir}")
             # Still try to find model paths
             try:
-                model_path, stats_path = resolve_model_paths_from_run_dir(args.training_run_dir, args.checkpoint_steps)
+                model_path, stats_path = resolve_model_paths_from_run_dir(args.model_dir, args.checkpoint_steps)
             except Exception as e:
                 print(f"Error: Could not find model files: {e}")
                 exit(1)
+    
+    # Load configuration from experiment directory (find latest)
+    elif args.training_run_dir:
+        try:
+            # Find latest experiment directory
+            latest_experiment_dir = find_latest_experiment_dir(args.training_run_dir)
+            print(f"Found latest experiment: {latest_experiment_dir}")
+            
+            # Load training configuration
+            config_manager.load_from_training_run(latest_experiment_dir)
+            print(f"Loaded configuration from latest experiment: {latest_experiment_dir}")
+            
+            # Find model and stats paths
+            model_path, stats_path = resolve_model_paths_from_run_dir(latest_experiment_dir, args.checkpoint_steps)
+            
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            exit(1)
+        except Exception as e:
+            print(f"Error: Could not find model files: {e}")
+            exit(1)
     
     # Load configuration file if specified
     elif args.config:
@@ -141,6 +169,41 @@ def load_and_setup_play_config(args):
         config_manager.config.play_config.checkpoint_steps = args.checkpoint_steps
     
     return config_manager, model_path, stats_path
+
+
+def find_latest_experiment_dir(experiment_base_dir):
+    """
+    Find the latest experiment directory based on timestamp.
+    
+    Args:
+        experiment_base_dir: Base directory containing experiment runs
+        
+    Returns:
+        str: Path to the latest experiment directory
+        
+    Raises:
+        FileNotFoundError: If no experiment directories found
+    """
+    if not os.path.exists(experiment_base_dir):
+        raise FileNotFoundError(f"Experiment directory does not exist: {experiment_base_dir}")
+    
+    # Get all directories that look like experiment runs
+    experiment_dirs = []
+    for item in os.listdir(experiment_base_dir):
+        item_path = os.path.join(experiment_base_dir, item)
+        if os.path.isdir(item_path) and '_' in item:
+            # Check if it contains a timestamp pattern (8 digits + 6 digits)
+            if any(part.isdigit() and len(part) == 14 for part in item.split('_')):
+                experiment_dirs.append(item)
+    
+    if not experiment_dirs:
+        raise FileNotFoundError(f"No experiment directories found in {experiment_base_dir}")
+    
+    # Sort by timestamp (latest first)
+    experiment_dirs.sort(key=lambda x: next(part for part in x.split('_') if part.isdigit() and len(part) == 14), reverse=True)
+    
+    latest_dir = os.path.join(experiment_base_dir, experiment_dirs[0])
+    return latest_dir
 
 
 def resolve_model_paths_from_run_dir(run_dir, checkpoint_steps=None):
