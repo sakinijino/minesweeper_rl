@@ -62,6 +62,7 @@ class ConfigManager:
             'continue_train': None
         }
         
+        
         if config_file:
             self.load_config_file(config_file)
             
@@ -230,10 +231,8 @@ class ConfigManager:
         for field in fields(PathsConfig):
             mapping[field.name] = ("paths_config", field.name)
         
-        # Play config
-        for field in fields(PlayConfig):
-            if field.name != "environment_config":  # Skip nested config
-                mapping[field.name] = ("play_config", field.name)
+        # PlayConfig is no longer managed by ConfigManager
+        # play.py will handle play configuration directly
         
         return mapping
     
@@ -300,30 +299,6 @@ class ConfigManager:
         
         return self.config
     
-    def get_play_config(self) -> PlayConfig:
-        """
-        Get play configuration from current training config.
-        
-        Returns:
-            PlayConfig: Play configuration
-            
-        Raises:
-            ConfigurationError: If no configuration has been built
-        """
-        if self.config is None:
-            raise ConfigurationError("No configuration available. Call build_config() first.")
-        
-        if self.config.play_config is None:
-            # Create default play config with current environment config
-            self.config.play_config = PlayConfig(
-                mode="batch",
-                num_episodes=100,
-                delay=0.1,
-                checkpoint_steps=None,
-                environment_config=self.config.environment_config
-            )
-        
-        return self.config.play_config
     
     @staticmethod
     def create_from_config_file(config_file: str) -> 'ConfigManager':

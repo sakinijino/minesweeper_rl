@@ -86,7 +86,6 @@ class TrainingConfig:
     environment_config: EnvironmentConfig
     training_execution: TrainingExecutionConfig
     paths_config: PathsConfig
-    play_config: Optional[PlayConfig]
 
 
 # Utility functions for configuration schema operations
@@ -170,19 +169,13 @@ def create_config_from_dict(config_dict: dict) -> TrainingConfig:
     training_execution = TrainingExecutionConfig(**training_execution_dict)
     paths_config = PathsConfig(**paths_config_dict)
     
-    play_config = None
-    if play_config_dict:
-        # Handle nested environment config in play config
-        play_env_config = play_config_dict.pop("environment_config", None)
-        if play_env_config:
-            play_config_dict["environment_config"] = EnvironmentConfig(**play_env_config)
-        play_config = PlayConfig(**play_config_dict)
+    # play_config is no longer part of TrainingConfig
+    # It will be handled separately in play.py
     
     return TrainingConfig(
         model_hyperparams=model_hyperparams,
         network_architecture=network_architecture,
         environment_config=environment_config,
         training_execution=training_execution,
-        paths_config=paths_config,
-        play_config=play_config
+        paths_config=paths_config
     )

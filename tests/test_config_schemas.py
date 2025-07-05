@@ -329,14 +329,14 @@ class TestTrainingConfig:
             network_architecture=sample_network_architecture,
             environment_config=custom_env,
             training_execution=sample_training_execution,
-            paths_config=sample_paths_config,
-            play_config=None
+            paths_config=sample_paths_config
         )
         
         assert config.model_hyperparams.learning_rate == 1e-4
         assert config.environment_config.width == 8
         assert config.training_execution.total_timesteps == 1_000_000
-        assert config.play_config is None
+        # TrainingConfig no longer has play_config field
+        assert not hasattr(config, 'play_config')
 
     def test_to_dict_conversion(self,
                                sample_model_hyperparams,
@@ -350,8 +350,7 @@ class TestTrainingConfig:
             network_architecture=sample_network_architecture,
             environment_config=sample_environment_config,
             training_execution=sample_training_execution,
-            paths_config=sample_paths_config,
-            play_config=None
+            paths_config=sample_paths_config
         )
         
         config_dict = asdict(config)
@@ -378,8 +377,7 @@ class TestTrainingConfig:
             network_architecture=sample_network_architecture,
             environment_config=sample_environment_config,
             training_execution=sample_training_execution,
-            paths_config=sample_paths_config,
-            play_config=None
+            paths_config=sample_paths_config
         )
         
         assert validate_training_config(config) is True
@@ -407,8 +405,7 @@ class TestTrainingConfig:
             network_architecture=sample_network_architecture,
             environment_config=sample_environment_config,
             training_execution=sample_training_execution,
-            paths_config=sample_paths_config,
-            play_config=None
+            paths_config=sample_paths_config
         )
         
         assert validate_training_config(config) is False
@@ -466,8 +463,8 @@ class TestConfigCreation:
         assert config.environment_config.height == 8
         assert config.training_execution.total_timesteps == 1_000_000
 
-    def test_create_config_from_dict_with_play_config(self):
-        """Test creating configuration from dictionary with play config."""
+    def test_create_config_from_dict_ignores_play_config(self):
+        """Test creating configuration from dictionary ignores play_config section."""
         config_dict = {
             "model_hyperparams": {
                 "learning_rate": 1e-4,
@@ -528,6 +525,54 @@ class TestConfigCreation:
         config = create_config_from_dict(config_dict)
         
         assert isinstance(config, TrainingConfig)
-        assert config.play_config is not None
-        assert config.play_config.mode == "agent"
-        assert config.play_config.environment_config.width == 8
+        # TrainingConfig should no longer have play_config field
+        assert not hasattr(config, 'play_config')
+        # Verify other fields are still correctly parsed
+        assert config.environment_config.width == 16
+
+
+class TestPlayConfigAsStandalone:
+    """Test PlayConfig as a standalone utility class for play.py"""
+    
+    def test_create_play_config_from_args_and_training_config(self, sample_environment_config):
+        """Test creating PlayConfig from arguments and training config."""
+        # Mock command line arguments
+        class MockArgs:
+            def __init__(self):
+                self.mode = "agent"
+                self.num_episodes = 50
+                self.delay = 0.5
+                self.checkpoint_steps = 100000
+        
+        args = MockArgs()
+        
+        # Create PlayConfig directly (as play.py would do)
+        play_config = PlayConfig(
+            mode=args.mode,
+            num_episodes=args.num_episodes,
+            delay=args.delay,
+            checkpoint_steps=args.checkpoint_steps,
+            environment_config=sample_environment_config
+        )
+        
+        assert play_config.mode == "agent"
+        assert play_config.num_episodes == 50
+        assert play_config.delay == 0.5
+        assert play_config.checkpoint_steps == 100000
+        assert play_config.environment_config == sample_environment_config
+    
+    def test_create_play_config_with_defaults(self, sample_environment_config):
+        """Test creating PlayConfig with default values."""
+        play_config = PlayConfig(
+            mode="batch",
+            num_episodes=100,
+            delay=0.1,
+            checkpoint_steps=None,
+            environment_config=sample_environment_config
+        )
+        
+        assert play_config.mode == "batch"
+        assert play_config.num_episodes == 100
+        assert play_config.delay == 0.1
+        assert play_config.checkpoint_steps is None
+        assert play_config.environment_config == sample_environment_config

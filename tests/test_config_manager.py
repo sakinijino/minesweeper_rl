@@ -309,23 +309,20 @@ class TestConfigManager:
         with pytest.raises(ConfigurationError):
             manager.get_config()
     
-    def test_get_play_config(self, config_yaml_file):
-        """Test getting play configuration."""
+    def test_training_config_has_no_play_config(self, config_yaml_file):
+        """Test that TrainingConfig no longer contains play_config."""
         manager = ConfigManager(config_yaml_file)
-        manager.build_config()
+        config = manager.build_config()
         
-        play_config = manager.get_play_config()
-        assert isinstance(play_config, PlayConfig)
-        assert play_config.mode == "batch"
-        assert play_config.num_episodes == 100
-        assert play_config.environment_config.width == 16
+        # TrainingConfig should not have play_config field anymore
+        assert not hasattr(config, 'play_config')
     
-    def test_get_play_config_before_build(self):
-        """Test getting play configuration before building it."""
+    def test_config_manager_no_longer_has_get_play_config(self):
+        """Test that ConfigManager no longer has get_play_config method."""
         manager = ConfigManager()
         
-        with pytest.raises(ConfigurationError):
-            manager.get_play_config()
+        # ConfigManager should not have get_play_config method anymore
+        assert not hasattr(manager, 'get_play_config')
     
     def test_create_from_config_file(self, config_yaml_file):
         """Test static method to create manager from config file."""

@@ -50,10 +50,10 @@ def setup_argument_parser():
                         help="Specific checkpoint step to load (uses latest if not specified)")
 
     # Play execution parameters
-    parser.add_argument("--num_episodes", type=int, default=None, 
-                        help="Number of episodes to run in batch mode")
-    parser.add_argument("--delay", type=float, default=None, 
-                        help="Delay (in seconds) between agent moves in interactive mode")
+    parser.add_argument("--num_episodes", type=int, default=100, 
+                        help="Number of episodes to run in batch mode (default: 100)")
+    parser.add_argument("--delay", type=float, default=0.1, 
+                        help="Delay (in seconds) between agent moves in interactive mode (default: 0.1)")
     parser.add_argument("--device", type=str, default=None, 
                         choices=["auto", "cpu", "cuda"], 
                         help="Device to use for loading the model")
@@ -89,9 +89,9 @@ def load_and_setup_play_config(args):
         args: Parsed command line arguments
         
     Returns:
-        Tuple[ConfigManager, str, str]: (config_manager, model_path, stats_path)
+        Tuple[ConfigManager, PlayConfig, str, str]: (config_manager, play_config, model_path, stats_path)
     """
-    config_manager = ConfigManager()
+    config_manager = None
     model_path = None
     stats_path = None
     
@@ -104,6 +104,7 @@ def load_and_setup_play_config(args):
     if args.model_dir:
         try:
             # Load training configuration
+            config_manager = ConfigManager()
             config_manager.load_from_training_run(args.model_dir)
             print(f"Loaded configuration from model directory: {args.model_dir}")
             
@@ -127,6 +128,7 @@ def load_and_setup_play_config(args):
             print(f"Found latest experiment: {latest_experiment_dir}")
             
             # Load training configuration
+            config_manager = ConfigManager()
             config_manager.load_from_training_run(latest_experiment_dir)
             print(f"Loaded configuration from latest experiment: {latest_experiment_dir}")
             
@@ -143,32 +145,39 @@ def load_and_setup_play_config(args):
     # Load configuration file if specified
     elif args.config:
         try:
-            config_manager.load_from_file(args.config)
+            config_manager = ConfigManager(args.config)
             print(f"Loaded configuration from file: {args.config}")
         except Exception as e:
             print(f"Error loading configuration file: {e}")
             exit(1)
     
-    # Create play configuration
-    if config_manager.config.play_config is None:
-        config_manager.config.play_config = PlayConfig(
-            environment_config=config_manager.config.environment_config
-        )
+    # Check if we have a configuration manager
+    if config_manager is None:
+        print("Error: No configuration source provided. Use --config, --model_dir, or --training_run_dir")
+        exit(1)
     
-    # Update play configuration with command line arguments
-    config_manager.update_from_args(args)
+    # Load command line arguments if provided
+    if args:
+        config_manager.load_from_args(args)
     
-    # Set play mode and episodes
-    if args.mode:
-        config_manager.config.play_config.mode = args.mode
-    if args.num_episodes is not None:
-        config_manager.config.play_config.num_episodes = args.num_episodes
-    if args.delay is not None:
-        config_manager.config.play_config.delay = args.delay
-    if args.checkpoint_steps is not None:
-        config_manager.config.play_config.checkpoint_steps = args.checkpoint_steps
+    # Build configuration
+    try:
+        config = config_manager.build_config()
+    except Exception as e:
+        print(f"Error building configuration: {e}")
+        exit(1)
     
-    return config_manager, model_path, stats_path
+    # Create play configuration directly from args and training config
+    # PlayConfig is no longer part of TrainingConfig
+    play_config = PlayConfig(
+        mode=args.mode,
+        num_episodes=args.num_episodes,
+        delay=args.delay,
+        checkpoint_steps=args.checkpoint_steps,
+        environment_config=config.environment_config
+    )
+    
+    return config_manager, play_config, model_path, stats_path
 
 
 def find_latest_experiment_dir(experiment_base_dir):
@@ -267,8 +276,9 @@ def load_model_and_environment(config_manager, env, model_path, stats_path):
     
     # Get device from play config or training config
     device = "cpu"  # Default device for play
-    if hasattr(config_manager.config, 'training_execution') and config_manager.config.training_execution.device:
-        device = config_manager.config.training_execution.device
+    config = config_manager.get_config()
+    if hasattr(config, 'training_execution') and config.training_execution.device:
+        device = config.training_execution.device
     
     try:
         model, env = create_inference_model(
@@ -292,13 +302,14 @@ def load_model_and_environment(config_manager, env, model_path, stats_path):
         return None, env
 
 
-def setup_random_seed(config_manager, env):
+def setup_random_seed(config_manager, env, play_config=None):
     """Setup random seed from configuration."""
     seed = None
-    if config_manager.config.play_config and hasattr(config_manager.config.play_config, 'seed'):
-        seed = config_manager.config.play_config.seed
-    elif config_manager.config.training_execution.seed:
-        seed = config_manager.config.training_execution.seed
+    config = config_manager.get_config()
+    if play_config and hasattr(play_config, 'seed'):
+        seed = play_config.seed
+    elif config.training_execution.seed:
+        seed = config.training_execution.seed
     
     if seed is not None:
         set_random_seed(seed)
@@ -322,16 +333,16 @@ def print_episode_result(episode, total_episodes, episode_steps, episode_reward,
           f"Steps: {episode_steps}, Reward: {episode_reward:.2f}, Result: {status}")
 
 
-def run_batch_mode(config_manager, model_path, stats_path):
+def run_batch_mode(config_manager, play_config, model_path, stats_path):
     """
     Batch mode: Agent runs multiple games without visualization.
     
     Args:
         config_manager: Configuration manager instance
+        play_config: Play configuration
         model_path: Path to model file
         stats_path: Path to VecNormalize stats file
     """
-    play_config = config_manager.get_play_config()
     print(f"--- Running Batch Mode ({play_config.num_episodes} episodes) ---")
 
     # Create environment (no rendering)
@@ -340,7 +351,7 @@ def run_batch_mode(config_manager, model_path, stats_path):
         mode='batch',
         vecnormalize_stats_path=stats_path
     )
-    setup_random_seed(config_manager, env)
+    setup_random_seed(config_manager, env, play_config)
     
     # Load model
     model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
@@ -388,12 +399,13 @@ def run_batch_mode(config_manager, model_path, stats_path):
     env.close()
 
 
-def run_human_mode(config_manager, stats_path):
+def run_human_mode(config_manager, play_config, stats_path):
     """
     Human mode: Human player plays through mouse clicks.
     
     Args:
         config_manager: Configuration manager instance
+        play_config: Play configuration
         stats_path: Path to VecNormalize stats file
     """
     print("--- Running Human Mode ---")
@@ -404,7 +416,7 @@ def run_human_mode(config_manager, stats_path):
         mode='human',
         vecnormalize_stats_path=stats_path
     )
-    setup_random_seed(config_manager, env)
+    setup_random_seed(config_manager, env, play_config)
     
     # Human mode doesn't need a model, but VecNormalize stats are handled in environment factory
 
@@ -495,12 +507,13 @@ def run_human_mode(config_manager, stats_path):
         print("Environment closed. Game exited.")
 
 
-def run_agent_mode(config_manager, model_path, stats_path):
+def run_agent_mode(config_manager, play_config, model_path, stats_path):
     """
     Agent demonstration mode: Agent plays with visualization.
     
     Args:
         config_manager: Configuration manager instance
+        play_config: Play configuration
         model_path: Path to model file
         stats_path: Path to VecNormalize stats file
     """
@@ -512,7 +525,7 @@ def run_agent_mode(config_manager, model_path, stats_path):
         mode='agent',
         vecnormalize_stats_path=stats_path
     )
-    setup_random_seed(config_manager, env)
+    setup_random_seed(config_manager, env, play_config)
     
     # Load model
     model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
@@ -523,8 +536,6 @@ def run_agent_mode(config_manager, model_path, stats_path):
     # Game statistics
     total_games = 0
     agent_wins = 0
-    
-    play_config = config_manager.get_play_config()
 
     try:
         obs = env.reset()
@@ -603,11 +614,10 @@ def run_agent_mode(config_manager, model_path, stats_path):
         print("Environment closed. Game exited.")
 
 
-def print_play_configuration(config_manager):
+def print_play_configuration(play_config):
     """Print play configuration information."""
     print("--- Play Configuration ---")
-    play_config = config_manager.get_play_config()
-    env_config = play_config.environment_config or config_manager.get_environment_config()
+    env_config = play_config.environment_config
     
     print(f"Mode: {play_config.mode}")
     print(f"Episodes: {play_config.num_episodes}")
@@ -616,23 +626,22 @@ def print_play_configuration(config_manager):
     print("--------------------------")
 
 
-def run_selected_mode(config_manager, model_path, stats_path):
+def run_selected_mode(config_manager, play_config, model_path, stats_path):
     """
     Run the selected play mode.
     
     Args:
         config_manager: Configuration manager instance
+        play_config: Play configuration
         model_path: Path to model file
         stats_path: Path to VecNormalize stats file
     """
-    play_config = config_manager.get_play_config()
-    
     if play_config.mode == "batch":
-        run_batch_mode(config_manager, model_path, stats_path)
+        run_batch_mode(config_manager, play_config, model_path, stats_path)
     elif play_config.mode == "human":
-        run_human_mode(config_manager, stats_path)
+        run_human_mode(config_manager, play_config, stats_path)
     elif play_config.mode == "agent":
-        run_agent_mode(config_manager, model_path, stats_path)
+        run_agent_mode(config_manager, play_config, model_path, stats_path)
     else:
         print(f"Error: Unknown mode '{play_config.mode}'")
         exit(1)
@@ -645,13 +654,13 @@ def main():
     args = parser.parse_args()
     
     # 2. Load and setup configuration
-    config_manager, model_path, stats_path = load_and_setup_play_config(args)
+    config_manager, play_config, model_path, stats_path = load_and_setup_play_config(args)
     
     # 3. Print configuration information
-    print_play_configuration(config_manager)
+    print_play_configuration(play_config)
     
     # 4. Run selected mode
-    run_selected_mode(config_manager, model_path, stats_path)
+    run_selected_mode(config_manager, play_config, model_path, stats_path)
 
 
 if __name__ == "__main__":
