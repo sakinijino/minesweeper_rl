@@ -22,7 +22,7 @@ from src.factories.model_factory import create_inference_model
 from src.factories.environment_factory import create_inference_environment
 
 
-# ===== 共享辅助函数 =====
+# ===== 游戏模式相关辅助函数 =====
 
 def create_environment(args, render_mode=None, vecnormalize_stats_path=None):
     """
@@ -373,14 +373,21 @@ def run_agent_mode(args):
         print("Environment closed. Game exited.")
 
 
-# ===== 主程序 =====
+# ===== 辅助函数 =====
 
-if __name__ == "__main__":
+def setup_argument_parser():
+    """
+    设置并返回配置好的参数解析器。
+    
+    Returns:
+        ArgumentParser: 配置好的参数解析器
+    """
     parser = argparse.ArgumentParser(description="Play Minesweeper in different modes.")
 
-    # --- 模式选择 ---
-    parser.add_argument("--human", action="store_true", help="Enable human play mode (interactive).")
-    parser.add_argument("--batch", action="store_true", help="Enable batch mode (agent plays without rendering).")
+    # --- 模式选择 (必填参数) ---
+    parser.add_argument("--mode", type=str, required=True, 
+                        choices=["agent", "batch", "human"], 
+                        help="Play mode: agent (AI with visualization), batch (AI without visualization), human (human player)")
     parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run in batch mode.")
 
     # --- 路径和命名 ---
@@ -405,14 +412,19 @@ if __name__ == "__main__":
                         help="Device to use for loading the model (auto, cpu, cuda)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for environment reset (optional)")
 
-    args = parser.parse_args()
+    return parser
 
-    print("--- Play Configuration ---")
-    for arg, value in vars(args).items():
-        print(f"{arg}: {value}")
-    print("--------------------------")
 
-    # --- 智能路径解析 ---
+def resolve_model_paths(args):
+    """
+    解析模型路径，查找检查点和统计文件。
+    
+    Args:
+        args: 命令行参数
+        
+    Returns:
+        Tuple[str, str]: (模型路径, 统计文件路径)
+    """
     try:
         # 检查 training_run_dir 是否是运行目录（包含 models/ 子目录）
         models_dir = os.path.join(args.training_run_dir, "models")
@@ -424,18 +436,19 @@ if __name__ == "__main__":
         
         # 查找最佳检查点
         best_checkpoint = find_best_checkpoint(checkpoint_dir, args.checkpoint_steps)
-        args.model_path = best_checkpoint
         print(f"Selected checkpoint: {os.path.basename(best_checkpoint)}")
         
         # 查找对应的 VecNormalize 统计文件
-        args.stats_path = find_vecnormalize_stats(best_checkpoint)
-        if args.stats_path:
-            print(f"Found VecNormalize stats: {os.path.basename(args.stats_path)}")
+        stats_path = find_vecnormalize_stats(best_checkpoint)
+        if stats_path:
+            print(f"Found VecNormalize stats: {os.path.basename(stats_path)}")
         else:
             print("Warning: No VecNormalize stats file found, using unnormalized environment")
         
-        print(f"Model path: {args.model_path}")
-        print(f"Stats path: {args.stats_path}")
+        print(f"Model path: {best_checkpoint}")
+        print(f"Stats path: {stats_path}")
+        
+        return best_checkpoint, stats_path
         
     except FileNotFoundError as e:
         print(f"Error: {e}")
@@ -445,14 +458,57 @@ if __name__ == "__main__":
         print(f"Error setting up model paths: {e}")
         exit(1)
 
-    # --- 运行选定的模式 ---
-    if args.batch:
-        if args.human:
-            print("Error: Cannot use --human and --batch simultaneously.")
-            exit(1)
+
+def print_play_configuration(args):
+    """打印游戏配置信息"""
+    print("--- Play Configuration ---")
+    for arg, value in vars(args).items():
+        print(f"{arg}: {value}")
+    print("--------------------------")
+
+
+def run_selected_mode(args):
+    """
+    根据选定的模式运行相应的游戏模式。
+    
+    Args:
+        args: 命令行参数
+    """
+    if args.mode == "batch":
         run_batch_mode(args)
-    elif args.human:
+    elif args.mode == "human":
         run_human_mode(args)
-    else:
-        # 默认为智能体演示模式
+    elif args.mode == "agent":
         run_agent_mode(args)
+    else:
+        print(f"Error: Unknown mode '{args.mode}'")
+        exit(1)
+
+
+def main():
+    """主游戏函数"""
+    # 1. 设置参数解析
+    parser = setup_argument_parser()
+    args = parser.parse_args()
+    
+    # 2. 打印配置信息
+    print_play_configuration(args)
+    
+    # 3. 解析模型路径（对于需要AI的模式）
+    if args.mode in ["agent", "batch"]:
+        model_path, stats_path = resolve_model_paths(args)
+        args.model_path = model_path
+        args.stats_path = stats_path
+    else:
+        # 人类模式不需要模型路径
+        args.model_path = None
+        args.stats_path = None
+    
+    # 4. 运行选定的模式
+    run_selected_mode(args)
+
+
+# ===== 主程序 =====
+
+if __name__ == "__main__":
+    main()
