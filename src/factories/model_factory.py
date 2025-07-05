@@ -43,7 +43,7 @@ def create_policy_kwargs(
     """
     # Get values from ConfigManager if provided, otherwise use parameters or defaults
     if config_manager is not None:
-        net_arch = config_manager.get_network_architecture()
+        net_arch = config_manager.config.network_architecture
         final_features_dim = features_dim if features_dim is not None else net_arch.features_dim
         final_pi_layers = pi_layers if pi_layers is not None else net_arch.pi_layers
         final_vf_layers = vf_layers if vf_layers is not None else net_arch.vf_layers
@@ -104,8 +104,8 @@ def create_new_model(
     """
     # Get values from ConfigManager if provided, otherwise use parameters
     if config_manager is not None:
-        model_hyperparams = config_manager.get_model_hyperparams()
-        training_execution = config_manager.get_training_execution()
+        model_hyperparams = config_manager.config.model_hyperparams
+        training_execution = config_manager.config.training_execution
         
         final_n_steps = n_steps if n_steps is not None else model_hyperparams.n_steps
         final_batch_size = batch_size if batch_size is not None else model_hyperparams.batch_size

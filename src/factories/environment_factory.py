@@ -60,7 +60,7 @@ def create_env_config(
     """
     # Determine default values from ConfigManager if provided, otherwise use defaults
     if config_manager is not None:
-        env_config_obj = config_manager.get_environment_config()
+        env_config_obj = config_manager.config.environment_config
         defaults = {
             'width': env_config_obj.width,
             'height': env_config_obj.height,

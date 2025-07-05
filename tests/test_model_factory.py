@@ -188,7 +188,7 @@ class TestNewModelCreation:
     
     def test_create_new_model_missing_required_args(self, mock_env):
         """Test creating new model with missing required arguments."""
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError):
             create_new_model(env=mock_env, learning_rate=1e-4)  # Missing other required args
 
 
