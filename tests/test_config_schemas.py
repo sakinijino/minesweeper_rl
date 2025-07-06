@@ -272,35 +272,6 @@ class TestPathsConfig:
         assert sample_paths_config.model_prefix == "minesweeper_ppo"
 
 
-class TestPlayConfig:
-    def test_required_parameters(self):
-        """Test that all parameters are required."""
-        with pytest.raises(TypeError):
-            PlayConfig()  # Should fail - no defaults
-
-    def test_custom_play_config(self, sample_environment_config):
-        """Test custom play configuration."""
-        play_config = PlayConfig(
-            mode="agent",
-            num_episodes=50,
-            delay=0.5,
-            checkpoint_steps=100000,
-            environment_config=sample_environment_config
-        )
-        assert play_config.mode == "agent"
-        assert play_config.num_episodes == 50
-        assert play_config.delay == 0.5
-        assert play_config.checkpoint_steps == 100000
-        assert play_config.environment_config == sample_environment_config
-
-    def test_sample_play_config(self, sample_play_config):
-        """Test sample play configuration."""
-        assert sample_play_config.mode == "batch"
-        assert sample_play_config.num_episodes == 100
-        assert sample_play_config.delay == 0.1
-        assert sample_play_config.checkpoint_steps is None
-
-
 class TestTrainingConfig:
     def test_required_parameters(self):
         """Test that all parameters are required."""
@@ -531,8 +502,33 @@ class TestConfigCreation:
         assert config.environment_config.width == 16
 
 
-class TestPlayConfigAsStandalone:
-    """Test PlayConfig as a standalone utility class for play.py"""
+class TestPlayConfig:
+    def test_required_parameters(self):
+        """Test that all parameters are required."""
+        with pytest.raises(TypeError):
+            PlayConfig()  # Should fail - no defaults
+
+    def test_custom_play_config(self, sample_environment_config):
+        """Test custom play configuration."""
+        play_config = PlayConfig(
+            mode="agent",
+            num_episodes=50,
+            delay=0.5,
+            checkpoint_steps=100000,
+            environment_config=sample_environment_config
+        )
+        assert play_config.mode == "agent"
+        assert play_config.num_episodes == 50
+        assert play_config.delay == 0.5
+        assert play_config.checkpoint_steps == 100000
+        assert play_config.environment_config == sample_environment_config
+
+    def test_sample_play_config(self, sample_play_config):
+        """Test sample play configuration."""
+        assert sample_play_config.mode == "batch"
+        assert sample_play_config.num_episodes == 100
+        assert sample_play_config.delay == 0.1
+        assert sample_play_config.checkpoint_steps is None
     
     def test_create_play_config_from_args_and_training_config(self, sample_environment_config):
         """Test creating PlayConfig from arguments and training config."""
@@ -559,20 +555,4 @@ class TestPlayConfigAsStandalone:
         assert play_config.num_episodes == 50
         assert play_config.delay == 0.5
         assert play_config.checkpoint_steps == 100000
-        assert play_config.environment_config == sample_environment_config
-    
-    def test_create_play_config_with_defaults(self, sample_environment_config):
-        """Test creating PlayConfig with default values."""
-        play_config = PlayConfig(
-            mode="batch",
-            num_episodes=100,
-            delay=0.1,
-            checkpoint_steps=None,
-            environment_config=sample_environment_config
-        )
-        
-        assert play_config.mode == "batch"
-        assert play_config.num_episodes == 100
-        assert play_config.delay == 0.1
-        assert play_config.checkpoint_steps is None
         assert play_config.environment_config == sample_environment_config

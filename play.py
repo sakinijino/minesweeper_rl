@@ -1,23 +1,14 @@
 # play_new.py - Refactored play script with new configuration system
 import os
-import gymnasium as gym
 import pygame
 import time
 import argparse
-import numpy as np
 
-from sb3_contrib import MaskablePPO
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
-
-# Import environment classes
-from src.env.minesweeper_env import MinesweeperEnv
 
 # Legacy config import removed - now using new configuration system
 from src.utils.checkpoint_utils import (
     find_best_checkpoint, 
-    load_training_config, 
-    find_vecnormalize_stats, 
     find_all_experiment_dirs,
     find_latest_experiment_dir,
     resolve_model_paths_from_run_dir
@@ -29,7 +20,7 @@ from src.factories.environment_factory import create_inference_environment
 
 # Import new configuration system
 from src.config.config_manager import ConfigManager
-from src.config.config_schemas import PlayConfig, EnvironmentConfig
+from src.config.config_schemas import PlayConfig
 
 
 def setup_argument_parser():

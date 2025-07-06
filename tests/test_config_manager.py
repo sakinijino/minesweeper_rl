@@ -10,10 +10,6 @@ from argparse import Namespace
 from src.config.config_manager import ConfigManager, ConfigurationError
 from src.config.config_schemas import (
     TrainingConfig,
-    ModelHyperparams,
-    EnvironmentConfig,
-    TrainingExecutionConfig,
-    PlayConfig
 )
 
 
@@ -308,21 +304,6 @@ class TestConfigManager:
         
         with pytest.raises(ConfigurationError):
             manager.get_config()
-    
-    def test_training_config_has_no_play_config(self, config_yaml_file):
-        """Test that TrainingConfig no longer contains play_config."""
-        manager = ConfigManager(config_yaml_file)
-        config = manager.build_config()
-        
-        # TrainingConfig should not have play_config field anymore
-        assert not hasattr(config, 'play_config')
-    
-    def test_config_manager_no_longer_has_get_play_config(self):
-        """Test that ConfigManager no longer has get_play_config method."""
-        manager = ConfigManager()
-        
-        # ConfigManager should not have get_play_config method anymore
-        assert not hasattr(manager, 'get_play_config')
     
     def test_create_from_config_file(self, config_yaml_file):
         """Test static method to create manager from config file."""

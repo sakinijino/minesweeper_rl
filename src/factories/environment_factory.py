@@ -15,7 +15,6 @@ from stable_baselines3.common.utils import set_random_seed
 
 from ..env.minesweeper_env import MinesweeperEnv
 from ..config.config_manager import ConfigManager
-from ..config.config_schemas import EnvironmentConfig
 
 
 class EnvironmentCreationError(Exception):

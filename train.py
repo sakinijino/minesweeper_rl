@@ -1,29 +1,21 @@
 # train_new.py - Refactored training script with new configuration system
-import os, datetime, json
+import os, datetime
 import argparse
-import gymnasium as gym
-from sb3_contrib import MaskablePPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import CheckpointCallback
 
 # Import environment and model factories
-from src.env.minesweeper_env import MinesweeperEnv
-from src.env.custom_cnn import CustomCNN
 from src.factories.model_factory import create_model
 from src.factories.environment_factory import create_training_environment
 
 # Legacy config import removed - now using new configuration system
 from src.utils.checkpoint_utils import (
-    find_best_checkpoint, 
-    load_training_config, 
     find_vecnormalize_stats,
     resolve_continue_training_paths
 )
 
 # Import new configuration system
 from src.config.config_manager import ConfigManager
-from src.config.config_schemas import TrainingConfig
 
 
 def setup_argument_parser():
