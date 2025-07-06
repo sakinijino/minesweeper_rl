@@ -157,3 +157,64 @@ def find_vecnormalize_stats(checkpoint_path):
             return stats_path
     
     return None
+
+
+def find_all_experiment_dirs(training_runs_dir):
+    """Find all experiment directories in a training runs folder.
+    
+    Args:
+        training_runs_dir (str): Path to the training runs directory
+        
+    Returns:
+        list: List of experiment directory paths sorted by timestamp (newest first)
+    """
+    if not os.path.exists(training_runs_dir):
+        return []
+    
+    experiment_dirs = []
+    
+    # Scan all subdirectories
+    for item in os.listdir(training_runs_dir):
+        item_path = os.path.join(training_runs_dir, item)
+        
+        # Skip if not a directory
+        if not os.path.isdir(item_path):
+            continue
+        
+        # Skip hidden directories and common non-experiment folders
+        if item.startswith('.') or item in ['README', 'docs', '__pycache__']:
+            continue
+        
+        # Check if it looks like an experiment directory
+        # Typically contains timestamp pattern: YYYYMMDD-HHMMSS (14 digits)
+        # Common patterns: mw_ppo_5x5x3_seed42_20250705152544
+        # or with continue: mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618
+        
+        # Look for timestamp pattern in directory name
+        timestamp_found = False
+        parts = item.split('_')
+        for part in parts:
+            if part.isdigit() and len(part) == 14:
+                timestamp_found = True
+                break
+        
+        # If no timestamp pattern found, skip
+        if not timestamp_found:
+            continue
+        
+        # Check if it has a models subdirectory (valid experiment)
+        models_dir = os.path.join(item_path, "models")
+        if os.path.exists(models_dir):
+            experiment_dirs.append(item_path)
+    
+    # Sort by timestamp (newest first)
+    def get_latest_timestamp(dir_path):
+        """Extract the latest timestamp from directory name."""
+        dir_name = os.path.basename(dir_path)
+        parts = dir_name.split('_')
+        timestamps = [part for part in parts if part.isdigit() and len(part) == 14]
+        return max(timestamps) if timestamps else '0'
+    
+    experiment_dirs.sort(key=get_latest_timestamp, reverse=True)
+    
+    return experiment_dirs

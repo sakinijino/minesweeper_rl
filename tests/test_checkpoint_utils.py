@@ -9,7 +9,8 @@ from src.utils.checkpoint_utils import (
     extract_steps_from_checkpoint, 
     find_best_checkpoint,
     load_training_config,
-    find_vecnormalize_stats
+    find_vecnormalize_stats,
+    find_all_experiment_dirs
 )
 
 
@@ -385,3 +386,127 @@ class TestFindVecnormalizeStats:
         stats_path = find_vecnormalize_stats(checkpoint)
         assert stats_path is not None
         assert os.path.basename(stats_path) == last_candidate
+
+
+class TestFindAllExperimentDirs:
+    """Test find_all_experiment_dirs functionality."""
+    
+    def test_find_all_experiment_dirs_basic(self, temp_dir):
+        """Test finding all experiment directories in training_runs folder."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create mock experiment directories with typical naming pattern
+        experiment_names = [
+            "mw_ppo_5x5x3_seed42_20250705152544",
+            "mw_ppo_8x8x10_seed123_20250706081004",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618"
+        ]
+        
+        for exp_name in experiment_names:
+            exp_dir = os.path.join(training_runs_dir, exp_name)
+            models_dir = os.path.join(exp_dir, "models")
+            os.makedirs(models_dir)
+            
+            # Create a final model in each
+            Path(os.path.join(models_dir, "final_model.zip")).touch()
+        
+        # Test the function
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        assert len(experiment_dirs) == 3
+        assert all(os.path.isdir(exp_dir) for exp_dir in experiment_dirs)
+        
+        # Check that all expected directories are found
+        exp_dir_names = [os.path.basename(d) for d in experiment_dirs]
+        for exp_name in experiment_names:
+            assert exp_name in exp_dir_names
+    
+    def test_find_all_experiment_dirs_empty(self, temp_dir):
+        """Test behavior with empty training_runs directory."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        assert experiment_dirs == []
+    
+    def test_find_all_experiment_dirs_nonexistent(self, temp_dir):
+        """Test behavior with non-existent directory."""
+        nonexistent_dir = os.path.join(temp_dir, "does_not_exist")
+        
+        experiment_dirs = find_all_experiment_dirs(nonexistent_dir)
+        assert experiment_dirs == []
+    
+    def test_find_all_experiment_dirs_filters_non_experiments(self, temp_dir):
+        """Test that non-experiment directories are filtered out."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create valid experiment directory
+        exp_dir = os.path.join(training_runs_dir, "mw_ppo_5x5x3_seed42_20250705152544")
+        models_dir = os.path.join(exp_dir, "models")
+        os.makedirs(models_dir)
+        
+        # Create non-experiment directories/files
+        os.makedirs(os.path.join(training_runs_dir, "README"))
+        Path(os.path.join(training_runs_dir, "config.json")).touch()
+        os.makedirs(os.path.join(training_runs_dir, ".git"))
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        # Should only find the valid experiment directory
+        assert len(experiment_dirs) == 1
+        assert os.path.basename(experiment_dirs[0]) == "mw_ppo_5x5x3_seed42_20250705152544"
+    
+    def test_find_all_experiment_dirs_sorted_by_timestamp(self, temp_dir):
+        """Test that experiment directories are sorted by timestamp (newest first)."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create experiment directories with different timestamps
+        experiment_names = [
+            "mw_ppo_5x5x3_seed42_20250705152544",  # oldest
+            "mw_ppo_5x5x3_seed42_20250706081004",  # newest
+            "mw_ppo_5x5x3_seed42_20250705160718"   # middle
+        ]
+        
+        for exp_name in experiment_names:
+            exp_dir = os.path.join(training_runs_dir, exp_name)
+            models_dir = os.path.join(exp_dir, "models")
+            os.makedirs(models_dir)
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        # Should be sorted by timestamp (newest first)
+        exp_dir_names = [os.path.basename(d) for d in experiment_dirs]
+        assert exp_dir_names[0] == "mw_ppo_5x5x3_seed42_20250706081004"  # newest
+        assert exp_dir_names[1] == "mw_ppo_5x5x3_seed42_20250705160718"  # middle
+        assert exp_dir_names[2] == "mw_ppo_5x5x3_seed42_20250705152544"  # oldest
+    
+    def test_find_all_experiment_dirs_with_continue_training(self, temp_dir):
+        """Test handling of continue training directories."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create original and continue training directories
+        exp_names = [
+            "mw_ppo_5x5x3_seed42_20250705160718",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705170000"
+        ]
+        
+        for exp_name in exp_names:
+            exp_dir = os.path.join(training_runs_dir, exp_name)
+            models_dir = os.path.join(exp_dir, "models")
+            os.makedirs(models_dir)
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        # Should find all three as separate experiments
+        assert len(experiment_dirs) == 3
+        
+        # Check they're sorted by timestamp (newest continue first)
+        exp_dir_names = [os.path.basename(d) for d in experiment_dirs]
+        assert exp_dir_names[0] == "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705170000"
+        assert exp_dir_names[1] == "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618"
+        assert exp_dir_names[2] == "mw_ppo_5x5x3_seed42_20250705160718"

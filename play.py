@@ -14,7 +14,7 @@ from stable_baselines3.common.utils import set_random_seed
 from src.env.minesweeper_env import MinesweeperEnv
 
 # Legacy config import removed - now using new configuration system
-from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
+from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats, find_all_experiment_dirs
 
 # Import model and environment factories
 from src.factories.model_factory import create_inference_model
@@ -36,8 +36,8 @@ def setup_argument_parser():
 
     # Core play arguments
     parser.add_argument("--mode", type=str, required=True, 
-                        choices=["agent", "batch", "human"], 
-                        help="Play mode: agent (AI with visualization), batch (AI without visualization), human (human player)")
+                        choices=["agent", "batch", "human", "compare"], 
+                        help="Play mode: agent (AI with visualization), batch (AI without visualization), human (human player), compare (compare multiple models)")
     
     # Model and configuration loading
     parser.add_argument("--model_dir", type=str, default=None, 
@@ -77,6 +77,10 @@ def setup_argument_parser():
                         help="Penalty for clicking revealed cells")
     parser.add_argument("--max_reward_per_step", type=float, default=None, 
                         help="Maximum reward in one step")
+    
+    # Compare mode specific arguments
+    parser.add_argument("--model_dirs", type=str, nargs='+', default=None,
+                        help="List of model directories to compare (for compare mode)")
 
     return parser
 
@@ -323,6 +327,72 @@ def setup_random_seed(config_manager, env, play_config=None):
         print(f"Using random seed: {seed}")
 
 
+def play_games(env, model, num_episodes, verbose=True):
+    """
+    Play multiple episodes and return statistics.
+    
+    Args:
+        env: Environment instance
+        model: Model instance
+        num_episodes: Number of episodes to play
+        verbose: Whether to print progress for each episode
+        
+    Returns:
+        dict: Statistics including total_games, wins, win_rate, avg_steps, avg_reward
+    """
+    total_games = 0
+    wins = 0
+    total_steps = 0
+    total_reward = 0
+    
+    for episode in range(num_episodes):
+        obs = env.reset()
+        terminated = False
+        truncated = False
+        episode_reward = 0
+        episode_steps = 0
+        won_episode = False
+        
+        while not terminated and not truncated:
+            # Get action masks and predict action
+            action_masks = env.env_method("action_masks")[0]
+            action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
+            
+            # Execute action
+            obs, reward, terminated_arr, info_arr = env.step(action)
+            terminated = terminated_arr[0]
+            actual_info = info_arr[0]
+            won_episode = actual_info.get('is_success', False)
+            truncated = actual_info.get('TimeLimit.truncated', False)
+            reward = reward[0]
+            
+            episode_reward += reward
+            episode_steps += 1
+        
+        # Update statistics
+        total_games += 1
+        if won_episode:
+            wins += 1
+        total_steps += episode_steps
+        total_reward += episode_reward
+        
+        if verbose:
+            print_episode_result(episode, num_episodes, episode_steps, episode_reward, won_episode)
+    
+    # Calculate averages
+    win_rate = (wins / total_games * 100) if total_games > 0 else 0
+    avg_steps = total_steps / total_games if total_games > 0 else 0
+    avg_reward = total_reward / total_games if total_games > 0 else 0
+    
+    return {
+        'total_games': total_games,
+        'wins': wins,
+        'win_rate': win_rate,
+        'avg_steps': avg_steps,
+        'avg_reward': avg_reward
+    }
+
+
 def print_final_statistics(total_games, wins, player_type):
     """Print final statistics."""
     win_rate = (wins / total_games * 100) if total_games > 0 else 0
@@ -365,43 +435,11 @@ def run_batch_mode(config_manager, play_config, model_path, stats_path):
         env.close()
         return
 
-    # Batch game loop
-    total_games = 0
-    wins = 0
-
-    for episode in range(play_config.num_episodes):
-        obs = env.reset()
-        terminated = False
-        truncated = False
-        episode_reward = 0
-        episode_steps = 0
-        won_episode = False
-
-        while not terminated and not truncated:
-            # Get action masks and predict action
-            action_masks = env.env_method("action_masks")[0]
-            action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
-
-            # Execute action
-            obs, reward, terminated_arr, info_arr = env.step(action)
-            terminated = terminated_arr[0]
-            actual_info = info_arr[0]
-            won_episode = actual_info.get('is_success', False)
-            truncated = actual_info.get('TimeLimit.truncated', False)
-            reward = reward[0]
-
-            episode_reward += reward
-            episode_steps += 1
-
-        # Statistics
-        total_games += 1
-        if won_episode:
-            wins += 1
-
-        print_episode_result(episode, play_config.num_episodes, episode_steps, episode_reward, won_episode)
+    # Play games using the common function
+    stats = play_games(env, model, play_config.num_episodes, verbose=True)
 
     # Print final statistics
-    print_final_statistics(total_games, wins, "Agent")
+    print_final_statistics(stats['total_games'], stats['wins'], "Agent")
     env.close()
 
 
@@ -632,6 +670,181 @@ def print_play_configuration(play_config):
     print("--------------------------")
 
 
+def run_compare_mode(args):
+    """
+    Compare mode: Run multiple models and compare their performance.
+    
+    Args:
+        args: Command line arguments
+    """
+    print("--- Running Compare Mode ---")
+    
+    # Collect models to compare
+    models_to_compare = []
+    
+    # Option 1: Scan training directory for all experiments
+    if args.training_run_dir:
+        print(f"Scanning training directory: {args.training_run_dir}")
+        experiment_dirs = find_all_experiment_dirs(args.training_run_dir)
+        if not experiment_dirs:
+            print(f"Error: No experiment directories found in {args.training_run_dir}")
+            exit(1)
+        print(f"Found {len(experiment_dirs)} experiments to compare")
+        
+        # For each experiment, find the best checkpoint
+        for exp_dir in experiment_dirs:
+            try:
+                exp_name = os.path.basename(exp_dir)
+                models_dir = os.path.join(exp_dir, "models")
+                model_path = find_best_checkpoint(models_dir)
+                models_to_compare.append((model_path, exp_name))
+            except Exception as e:
+                print(f"Warning: Could not find model in {exp_dir}: {e}")
+                continue
+    
+    # Option 2: Use specified model directories
+    elif args.model_dirs:
+        print(f"Using specified model directories: {len(args.model_dirs)} models")
+        for model_dir in args.model_dirs:
+            # Find best checkpoint in each directory
+            try:
+                model_path, _ = resolve_model_paths_from_run_dir(model_dir, args.checkpoint_steps)
+                dir_name = os.path.basename(model_dir)
+                models_to_compare.append((model_path, dir_name))
+            except Exception as e:
+                print(f"Warning: Could not find model in {model_dir}: {e}")
+                continue
+    
+    else:
+        print("Error: Compare mode requires either --training_run_dir or --model_dirs")
+        exit(1)
+    
+    if not models_to_compare:
+        print("Error: No valid models found to compare")
+        exit(1)
+    
+    # Results storage
+    results = []
+    
+    # Run each model
+    for i, (model_path, model_name) in enumerate(models_to_compare):
+        print(f"\n[{i+1}/{len(models_to_compare)}] Testing model: {model_name}")
+        
+        try:
+            # Temporarily set model_dir for load_and_setup_play_config
+            original_model_dir = getattr(args, 'model_dir', None)
+            original_training_run_dir = getattr(args, 'training_run_dir', None)
+            
+            # Determine model directory
+            model_dir = os.path.dirname(model_path)
+            if "models" in model_dir:
+                # Go up one directory to find training config
+                training_dir = os.path.dirname(model_dir)
+            else:
+                training_dir = model_dir
+            
+            # Set args for load_and_setup_play_config
+            args.model_dir = training_dir
+            args.training_run_dir = None
+            
+            # Use existing configuration loading logic
+            config_manager, _, loaded_model_path, stats_path = load_and_setup_play_config(args)
+            
+            # Restore original args
+            args.model_dir = original_model_dir
+            args.training_run_dir = original_training_run_dir
+            
+            # Use the model_path we found, not the one from load_and_setup_play_config
+            # because we want the specific checkpoint, not necessarily the best one
+            
+            # Create environment
+            env, _ = create_inference_environment(
+                config_manager=config_manager,
+                mode='batch',
+                vecnormalize_stats_path=stats_path
+            )
+            
+            # Set seed if provided
+            if args.seed:
+                set_random_seed(args.seed)
+                env.seed(args.seed)
+            
+            # Load model
+            model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
+            
+            if model is None:
+                print(f"Error: Could not load model {model_name}")
+                env.close()
+                continue
+            
+            # Play games
+            print(f"Running {args.num_episodes} episodes...")
+            stats = play_games(env, model, args.num_episodes, verbose=False)
+            
+            # Store results
+            results.append({
+                'model_name': model_name,
+                'model_path': model_path,
+                'stats': stats
+            })
+            
+            # Print individual results
+            print(f"  Win Rate: {stats['win_rate']:.2f}%")
+            print(f"  Average Steps: {stats['avg_steps']:.2f}")
+            print(f"  Average Reward: {stats['avg_reward']:.2f}")
+            
+            env.close()
+            
+        except Exception as e:
+            import traceback
+            print(f"Error testing model {model_name}: {e}")
+            print(f"Full traceback: {traceback.format_exc()}")
+            continue
+    
+    # Print comparison table
+    print_comparison_results(results)
+
+
+def print_comparison_results(results):
+    """
+    Print formatted comparison results table.
+    
+    Args:
+        results: List of result dictionaries
+    """
+    if not results:
+        print("\nNo results to compare.")
+        return
+    
+    print("\n" + "="*80)
+    print("COMPARISON RESULTS")
+    print("="*80)
+    
+    # Sort by win rate (descending)
+    results.sort(key=lambda x: x['stats']['win_rate'], reverse=True)
+    
+    # Print header
+    print(f"{'Rank':<6} {'Model':<30} {'Games':<8} {'Wins':<8} {'Win Rate':<12} {'Avg Steps':<12} {'Avg Reward':<12}")
+    print("-"*80)
+    
+    # Print each result
+    for i, result in enumerate(results):
+        stats = result['stats']
+        model_name = result['model_name']
+        if len(model_name) > 30:
+            model_name = model_name[:27] + "..."
+        
+        print(f"{i+1:<6} {model_name:<30} {stats['total_games']:<8} {stats['wins']:<8} "
+              f"{stats['win_rate']:<12.2f} {stats['avg_steps']:<12.2f} {stats['avg_reward']:<12.2f}")
+    
+    print("="*80)
+    
+    # Print best model
+    if results:
+        best = results[0]
+        print(f"\nBest Model: {best['model_name']} with {best['stats']['win_rate']:.2f}% win rate")
+
+
 def run_selected_mode(config_manager, play_config, model_path, stats_path):
     """
     Run the selected play mode.
@@ -648,6 +861,9 @@ def run_selected_mode(config_manager, play_config, model_path, stats_path):
         run_human_mode(config_manager, play_config, stats_path)
     elif play_config.mode == "agent":
         run_agent_mode(config_manager, play_config, model_path, stats_path)
+    elif play_config.mode == "compare":
+        # Compare mode will be handled separately in main()
+        pass
     else:
         print(f"Error: Unknown mode '{play_config.mode}'")
         exit(1)
@@ -659,13 +875,18 @@ def main():
     parser = setup_argument_parser()
     args = parser.parse_args()
     
-    # 2. Load and setup configuration
+    # 2. Handle compare mode separately
+    if args.mode == "compare":
+        run_compare_mode(args)
+        return
+    
+    # 3. Load and setup configuration for other modes
     config_manager, play_config, model_path, stats_path = load_and_setup_play_config(args)
     
-    # 3. Print configuration information
+    # 4. Print configuration information
     print_play_configuration(play_config)
     
-    # 4. Run selected mode
+    # 5. Run selected mode
     run_selected_mode(config_manager, play_config, model_path, stats_path)
 
 

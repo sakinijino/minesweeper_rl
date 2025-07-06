@@ -73,6 +73,32 @@ python play.py --mode human --width 8 --height 8 --n_mines 12
 python play.py --mode agent --config ./configs/my_config.json
 ```
 
+### Model Comparison
+
+The compare mode allows you to evaluate and compare the performance of multiple trained models:
+
+```bash
+# Compare all experiments in training_runs directory
+python play.py --mode compare --training_run_dir ./training_runs/ --num_episodes 100
+
+# Compare specific model directories
+python play.py --mode compare --model_dirs \
+  ./training_runs/model1/ \
+  ./training_runs/model2/ \
+  ./training_runs/model3/ \
+  --num_episodes 50
+
+# Compare with custom settings
+python play.py --mode compare --training_run_dir ./training_runs/ \
+  --num_episodes 200 --device cpu --seed 42
+```
+
+The compare mode automatically:
+- Finds the latest checkpoint (final_model.zip) from each experiment
+- Runs the specified number of episodes for each model
+- Displays a ranked comparison table with win rates, average steps, and rewards
+- Identifies the best performing model
+
 ### Continue Training
 
 ```bash
@@ -104,7 +130,7 @@ tensorboard --logdir ./training_runs/
 - **MaskablePPO**: Prevents invalid moves (clicking revealed cells)
 - **Custom CNN**: Optimized for grid-based input processing
 - **Advanced Configuration System**: YAML/JSON-based config with parameter priority system
-- **Multiple Play Modes**: AI demonstration, batch evaluation, human play
+- **Multiple Play Modes**: AI demonstration, batch evaluation, human play, model comparison
 - **TensorBoard Integration**: Monitor training progress
 - **Checkpoint System**: Resume training from any checkpoint
 - **Factory Pattern**: Modular environment and model creation
@@ -127,6 +153,7 @@ tensorboard --logdir ./training_runs/
 | `agent` | AI plays with visualization | `--mode agent` |
 | `batch` | AI evaluation without graphics | `--mode batch` |
 | `human` | Human player with mouse input | `--mode human` |
+| `compare` | Compare multiple models performance | `--mode compare` |
 
 ## Model Loading Options
 
@@ -134,6 +161,7 @@ tensorboard --logdir ./training_runs/
 |-----------|-------------|-------|
 | `--model_dir` | Load from specific model directory | `--model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/` |
 | `--training_run_dir` | Load latest model from experiment directory | `--training_run_dir ./training_runs/` |
+| `--model_dirs` | Multiple model directories (compare mode only) | `--model_dirs ./model1/ ./model2/ ./model3/` |
 | `--config` | Load from configuration file | `--config ./configs/my_config.json` |
 
 ## Configuration System
