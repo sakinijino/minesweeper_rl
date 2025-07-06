@@ -58,6 +58,18 @@ def mock_training_run_dir(temp_dir):
         filepath = os.path.join(models_dir, filename)
         Path(filepath).touch()
     
+    # Create VecNormalize stats files
+    stats_files = [
+        "rl_model_vecnormalize_25000_steps.pkl",
+        "rl_model_vecnormalize_50000_steps.pkl", 
+        "rl_model_vecnormalize_75000_steps.pkl",
+        "final_stats_vecnormalize.pkl"
+    ]
+    
+    for filename in stats_files:
+        filepath = os.path.join(models_dir, filename)
+        Path(filepath).touch()
+    
     # Create training config
     config = {
         "model_hyperparams": {

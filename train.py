@@ -14,7 +14,12 @@ from src.factories.model_factory import create_model
 from src.factories.environment_factory import create_training_environment
 
 # Legacy config import removed - now using new configuration system
-from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats
+from src.utils.checkpoint_utils import (
+    find_best_checkpoint, 
+    load_training_config, 
+    find_vecnormalize_stats,
+    resolve_continue_training_paths
+)
 
 # Import new configuration system
 from src.config.config_manager import ConfigManager
@@ -136,30 +141,26 @@ def load_and_setup_config(args):
     
     if args.continue_from:
         continue_training = True
-        checkpoint_dir = args.continue_from
         
-        # Check if continue_from is a run directory (contains models/ subdirectory)
-        models_dir = os.path.join(checkpoint_dir, "models")
-        if os.path.exists(models_dir):
-            original_run_dir = checkpoint_dir
-            checkpoint_dir = models_dir
-            
-            # Load configuration from training run
-            try:
-                config_manager = ConfigManager()
-                config_manager.load_from_training_run(original_run_dir)
-                print(f"Loaded configuration from training run: {original_run_dir}")
-            except FileNotFoundError:
-                print(f"Warning: No training config found in {original_run_dir}")
-                if not args.config:
-                    print("Error: No configuration source provided for continue training")
-                    exit(1)
-        
-        # Find the best checkpoint to continue from
+        # Use the new resolve_continue_training_paths function
         try:
-            checkpoint_path = find_best_checkpoint(checkpoint_dir, args.continue_steps)
-            print(f"Found checkpoint to continue from: {checkpoint_path}")
-        except FileNotFoundError as e:
+            paths_result = resolve_continue_training_paths(args.continue_from, args.continue_steps)
+            original_run_dir = paths_result['original_run_dir']
+            checkpoint_path = paths_result['checkpoint_path']
+            
+            # Load configuration from training run if it's a training directory
+            if paths_result['is_training_dir']:
+                try:
+                    config_manager = ConfigManager()
+                    config_manager.load_from_training_run(original_run_dir)
+                    print(f"Loaded configuration from training run: {original_run_dir}")
+                except FileNotFoundError:
+                    print(f"Warning: No training config found in {original_run_dir}")
+                    if not args.config:
+                        print("Error: No configuration source provided for continue training")
+                        exit(1)
+                        
+        except Exception as e:
             print(f"Error: {e}")
             exit(1)
     

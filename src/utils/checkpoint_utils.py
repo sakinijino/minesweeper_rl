@@ -218,3 +218,136 @@ def find_all_experiment_dirs(training_runs_dir):
     experiment_dirs.sort(key=get_latest_timestamp, reverse=True)
     
     return experiment_dirs
+
+
+def find_latest_experiment_dir(experiment_base_dir):
+    """Find the latest experiment directory based on timestamp.
+    
+    Args:
+        experiment_base_dir (str): Base directory containing experiment runs
+        
+    Returns:
+        str: Path to the latest experiment directory
+        
+    Raises:
+        FileNotFoundError: If no experiment directories found
+    """
+    if not os.path.exists(experiment_base_dir):
+        raise FileNotFoundError(f"Experiment directory does not exist: {experiment_base_dir}")
+    
+    # Get all directories that look like experiment runs
+    experiment_dirs = []
+    for item in os.listdir(experiment_base_dir):
+        item_path = os.path.join(experiment_base_dir, item)
+        if os.path.isdir(item_path) and '_' in item:
+            # Check if it contains a timestamp pattern (8 digits + 6 digits)
+            if any(part.isdigit() and len(part) == 14 for part in item.split('_')):
+                experiment_dirs.append(item)
+    
+    if not experiment_dirs:
+        raise FileNotFoundError(f"No experiment directories found in {experiment_base_dir}")
+    
+    def get_latest_timestamp(dir_name):
+        """Extract the latest timestamp from directory name."""
+        parts = dir_name.split('_')
+        timestamps = [part for part in parts if part.isdigit() and len(part) == 14]
+        return max(timestamps) if timestamps else '0'
+    
+    # Sort by latest timestamp (latest first)
+    experiment_dirs.sort(key=get_latest_timestamp, reverse=True)
+    
+    latest_dir = os.path.join(experiment_base_dir, experiment_dirs[0])
+    return latest_dir
+
+
+def resolve_model_paths_from_run_dir(run_dir, checkpoint_steps=None):
+    """Resolve model and stats paths from training run directory.
+    
+    Args:
+        run_dir (str): Training run directory
+        checkpoint_steps (int, optional): Specific checkpoint steps
+        
+    Returns:
+        tuple: (model_path, stats_path)
+        
+    Raises:
+        Exception: If model paths cannot be resolved
+    """
+    try:
+        # Check if run_dir is a training run directory (contains models/ subdirectory)
+        models_dir = os.path.join(run_dir, "models")
+        if os.path.exists(models_dir):
+            checkpoint_dir = models_dir
+        else:
+            # Assume run_dir is already the models directory
+            checkpoint_dir = run_dir
+        
+        # Find the best checkpoint
+        best_checkpoint = find_best_checkpoint(checkpoint_dir, checkpoint_steps)
+        print(f"Selected checkpoint: {os.path.basename(best_checkpoint)}")
+        
+        # Find corresponding VecNormalize stats file
+        stats_path = find_vecnormalize_stats(best_checkpoint)
+        if stats_path:
+            print(f"Found VecNormalize stats: {os.path.basename(stats_path)}")
+        else:
+            print("Warning: No VecNormalize stats file found, using unnormalized environment")
+        
+        return best_checkpoint, stats_path
+        
+    except Exception as e:
+        raise Exception(f"Could not resolve model paths from {run_dir}: {e}")
+
+
+def resolve_continue_training_paths(continue_from, continue_steps=None):
+    """Resolve paths for continue training from a given directory.
+    
+    This function handles both training run directories (containing models/ subdirectory)
+    and models directories directly. It's designed to extract the logic from train.py
+    for better code reuse.
+    
+    Args:
+        continue_from (str): Path to continue training from (can be training dir or models dir)
+        continue_steps (int, optional): Specific checkpoint step to continue from
+        
+    Returns:
+        dict: Dictionary containing:
+            - original_run_dir: Original training run directory (None if models dir directly)
+            - checkpoint_dir: Directory containing checkpoint files
+            - checkpoint_path: Path to the specific checkpoint to continue from
+            - is_training_dir: Whether the input was a training directory
+            
+    Raises:
+        Exception: If directory doesn't exist or no checkpoints found
+    """
+    if not os.path.exists(continue_from):
+        raise Exception(f"Continue training directory does not exist: {continue_from}")
+    
+    # Check if continue_from is a training run directory (contains models/ subdirectory)
+    models_dir = os.path.join(continue_from, "models")
+    if os.path.exists(models_dir):
+        # It's a training run directory
+        original_run_dir = continue_from
+        checkpoint_dir = models_dir
+        is_training_dir = True
+        print(f"Detected training run directory: {continue_from}")
+    else:
+        # Assume it's already a models directory
+        original_run_dir = None
+        checkpoint_dir = continue_from
+        is_training_dir = False
+        print("Using models directory directly")
+    
+    # Find the best checkpoint to continue from
+    try:
+        checkpoint_path = find_best_checkpoint(checkpoint_dir, continue_steps)
+        print(f"Found checkpoint to continue from: {os.path.basename(checkpoint_path)}")
+    except FileNotFoundError as e:
+        raise Exception(f"No checkpoint files found in {checkpoint_dir}")
+    
+    return {
+        'original_run_dir': original_run_dir,
+        'checkpoint_dir': checkpoint_dir,
+        'checkpoint_path': checkpoint_path,
+        'is_training_dir': is_training_dir
+    }

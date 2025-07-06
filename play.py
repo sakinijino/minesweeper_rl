@@ -14,7 +14,14 @@ from stable_baselines3.common.utils import set_random_seed
 from src.env.minesweeper_env import MinesweeperEnv
 
 # Legacy config import removed - now using new configuration system
-from src.utils.checkpoint_utils import find_best_checkpoint, load_training_config, find_vecnormalize_stats, find_all_experiment_dirs
+from src.utils.checkpoint_utils import (
+    find_best_checkpoint, 
+    load_training_config, 
+    find_vecnormalize_stats, 
+    find_all_experiment_dirs,
+    find_latest_experiment_dir,
+    resolve_model_paths_from_run_dir
+)
 
 # Import model and environment factories
 from src.factories.model_factory import create_inference_model
@@ -183,83 +190,6 @@ def load_and_setup_play_config(args):
     
     return config_manager, play_config, model_path, stats_path
 
-
-def find_latest_experiment_dir(experiment_base_dir):
-    """
-    Find the latest experiment directory based on timestamp.
-    
-    Args:
-        experiment_base_dir: Base directory containing experiment runs
-        
-    Returns:
-        str: Path to the latest experiment directory
-        
-    Raises:
-        FileNotFoundError: If no experiment directories found
-    """
-    if not os.path.exists(experiment_base_dir):
-        raise FileNotFoundError(f"Experiment directory does not exist: {experiment_base_dir}")
-    
-    # Get all directories that look like experiment runs
-    experiment_dirs = []
-    for item in os.listdir(experiment_base_dir):
-        item_path = os.path.join(experiment_base_dir, item)
-        if os.path.isdir(item_path) and '_' in item:
-            # Check if it contains a timestamp pattern (8 digits + 6 digits)
-            if any(part.isdigit() and len(part) == 14 for part in item.split('_')):
-                experiment_dirs.append(item)
-    
-    if not experiment_dirs:
-        raise FileNotFoundError(f"No experiment directories found in {experiment_base_dir}")
-    
-    def get_latest_timestamp(dir_name):
-        """Extract the latest timestamp from directory name."""
-        parts = dir_name.split('_')
-        timestamps = [part for part in parts if part.isdigit() and len(part) == 14]
-        return max(timestamps) if timestamps else '0'
-    
-    # Sort by latest timestamp (latest first)
-    experiment_dirs.sort(key=get_latest_timestamp, reverse=True)
-    
-    latest_dir = os.path.join(experiment_base_dir, experiment_dirs[0])
-    return latest_dir
-
-
-def resolve_model_paths_from_run_dir(run_dir, checkpoint_steps=None):
-    """
-    Resolve model and stats paths from training run directory.
-    
-    Args:
-        run_dir: Training run directory
-        checkpoint_steps: Specific checkpoint steps (optional)
-        
-    Returns:
-        Tuple[str, str]: (model_path, stats_path)
-    """
-    try:
-        # Check if run_dir is a training run directory (contains models/ subdirectory)
-        models_dir = os.path.join(run_dir, "models")
-        if os.path.exists(models_dir):
-            checkpoint_dir = models_dir
-        else:
-            # Assume run_dir is already the models directory
-            checkpoint_dir = run_dir
-        
-        # Find the best checkpoint
-        best_checkpoint = find_best_checkpoint(checkpoint_dir, checkpoint_steps)
-        print(f"Selected checkpoint: {os.path.basename(best_checkpoint)}")
-        
-        # Find corresponding VecNormalize stats file
-        stats_path = find_vecnormalize_stats(best_checkpoint)
-        if stats_path:
-            print(f"Found VecNormalize stats: {os.path.basename(stats_path)}")
-        else:
-            print("Warning: No VecNormalize stats file found, using unnormalized environment")
-        
-        return best_checkpoint, stats_path
-        
-    except Exception as e:
-        raise Exception(f"Could not resolve model paths from {run_dir}: {e}")
 
 
 def load_model_and_environment(config_manager, env, model_path, stats_path):
