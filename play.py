@@ -262,8 +262,6 @@ def resolve_model_paths_from_run_dir(run_dir, checkpoint_steps=None):
         raise Exception(f"Could not resolve model paths from {run_dir}: {e}")
 
 
-
-
 def load_model_and_environment(config_manager, env, model_path, stats_path):
     """
     Load model and environment for inference.
@@ -325,6 +323,13 @@ def setup_random_seed(config_manager, env, play_config=None):
         set_random_seed(seed)
         env.seed(seed)
         print(f"Using random seed: {seed}")
+
+
+def print_episode_result(episode, total_episodes, episode_steps, episode_reward, won_episode):
+    """Print single episode result."""
+    status = "Win" if won_episode else "Lose"
+    print(f"Episode {episode + 1}/{total_episodes} finished - "
+          f"Steps: {episode_steps}, Reward: {episode_reward:.2f}, Result: {status}")
 
 
 def play_games(env, model, num_episodes, verbose=True):
@@ -402,13 +407,6 @@ def print_final_statistics(total_games, wins, player_type):
     print(f"{player_type} Win Rate: {win_rate:.2f}%")
 
 
-def print_episode_result(episode, total_episodes, episode_steps, episode_reward, won_episode):
-    """Print single episode result."""
-    status = "Win" if won_episode else "Lose"
-    print(f"Episode {episode + 1}/{total_episodes} finished - "
-          f"Steps: {episode_steps}, Reward: {episode_reward:.2f}, Result: {status}")
-
-
 def run_batch_mode(config_manager, play_config, model_path, stats_path):
     """
     Batch mode: Agent runs multiple games without visualization.
@@ -427,13 +425,14 @@ def run_batch_mode(config_manager, play_config, model_path, stats_path):
         mode='batch',
         vecnormalize_stats_path=stats_path
     )
-    setup_random_seed(config_manager, env, play_config)
     
     # Load model
     model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
     if model is None:
         env.close()
         return
+    
+    setup_random_seed(config_manager, env, play_config)
 
     # Play games using the common function
     stats = play_games(env, model, play_config.num_episodes, verbose=True)
@@ -670,6 +669,73 @@ def print_play_configuration(play_config):
     print("--------------------------")
 
 
+def run_selected_mode(args):
+    """
+    Run the selected play mode.
+    
+    Args:
+        args: Command line arguments
+    """
+    # Load and setup configuration for other modes
+    config_manager, play_config, model_path, stats_path = load_and_setup_play_config(args)
+    
+    # Print configuration information
+    print_play_configuration(play_config)
+    
+    if play_config.mode == "batch":
+        run_batch_mode(config_manager, play_config, model_path, stats_path)
+    elif play_config.mode == "human":
+        run_human_mode(config_manager, play_config, stats_path)
+    elif play_config.mode == "agent":
+        run_agent_mode(config_manager, play_config, model_path, stats_path)
+    elif play_config.mode == "compare":
+        # Compare mode will be handled separately in main()
+        pass
+    else:
+        print(f"Error: Unknown mode '{play_config.mode}'")
+        exit(1)
+
+
+def print_comparison_results(results):
+    """
+    Print formatted comparison results table.
+    
+    Args:
+        results: List of result dictionaries
+    """
+    if not results:
+        print("\nNo results to compare.")
+        return
+    
+    print("\n" + "="*80)
+    print("COMPARISON RESULTS")
+    print("="*80)
+    
+    # Sort by win rate (descending)
+    results.sort(key=lambda x: x['stats']['win_rate'], reverse=True)
+    
+    # Print header
+    print(f"{'Rank':<6} {'Model':<30} {'Games':<8} {'Wins':<8} {'Win Rate':<12} {'Avg Steps':<12} {'Avg Reward':<12}")
+    print("-"*80)
+    
+    # Print each result
+    for i, result in enumerate(results):
+        stats = result['stats']
+        model_name = result['model_name']
+        if len(model_name) > 30:
+            model_name = model_name[:27] + "..."
+        
+        print(f"{i+1:<6} {model_name:<30} {stats['total_games']:<8} {stats['wins']:<8} "
+              f"{stats['win_rate']:<12.2f} {stats['avg_steps']:<12.2f} {stats['avg_reward']:<12.2f}")
+    
+    print("="*80)
+    
+    # Print best model
+    if results:
+        best = results[0]
+        print(f"\nBest Model: {best['model_name']} with {best['stats']['win_rate']:.2f}% win rate")
+
+
 def run_compare_mode(args):
     """
     Compare mode: Run multiple models and compare their performance.
@@ -764,13 +830,13 @@ def run_compare_mode(args):
                 vecnormalize_stats_path=stats_path
             )
             
+            # Load model
+            model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
+
             # Set seed if provided
             if args.seed:
                 set_random_seed(args.seed)
                 env.seed(args.seed)
-            
-            # Load model
-            model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
             
             if model is None:
                 print(f"Error: Could not load model {model_name}")
@@ -805,89 +871,16 @@ def run_compare_mode(args):
     print_comparison_results(results)
 
 
-def print_comparison_results(results):
-    """
-    Print formatted comparison results table.
-    
-    Args:
-        results: List of result dictionaries
-    """
-    if not results:
-        print("\nNo results to compare.")
-        return
-    
-    print("\n" + "="*80)
-    print("COMPARISON RESULTS")
-    print("="*80)
-    
-    # Sort by win rate (descending)
-    results.sort(key=lambda x: x['stats']['win_rate'], reverse=True)
-    
-    # Print header
-    print(f"{'Rank':<6} {'Model':<30} {'Games':<8} {'Wins':<8} {'Win Rate':<12} {'Avg Steps':<12} {'Avg Reward':<12}")
-    print("-"*80)
-    
-    # Print each result
-    for i, result in enumerate(results):
-        stats = result['stats']
-        model_name = result['model_name']
-        if len(model_name) > 30:
-            model_name = model_name[:27] + "..."
-        
-        print(f"{i+1:<6} {model_name:<30} {stats['total_games']:<8} {stats['wins']:<8} "
-              f"{stats['win_rate']:<12.2f} {stats['avg_steps']:<12.2f} {stats['avg_reward']:<12.2f}")
-    
-    print("="*80)
-    
-    # Print best model
-    if results:
-        best = results[0]
-        print(f"\nBest Model: {best['model_name']} with {best['stats']['win_rate']:.2f}% win rate")
-
-
-def run_selected_mode(config_manager, play_config, model_path, stats_path):
-    """
-    Run the selected play mode.
-    
-    Args:
-        config_manager: Configuration manager instance
-        play_config: Play configuration
-        model_path: Path to model file
-        stats_path: Path to VecNormalize stats file
-    """
-    if play_config.mode == "batch":
-        run_batch_mode(config_manager, play_config, model_path, stats_path)
-    elif play_config.mode == "human":
-        run_human_mode(config_manager, play_config, stats_path)
-    elif play_config.mode == "agent":
-        run_agent_mode(config_manager, play_config, model_path, stats_path)
-    elif play_config.mode == "compare":
-        # Compare mode will be handled separately in main()
-        pass
-    else:
-        print(f"Error: Unknown mode '{play_config.mode}'")
-        exit(1)
-
-
 def main():
     """Main play function with new configuration system."""
     # 1. Setup argument parser
     parser = setup_argument_parser()
     args = parser.parse_args()
     
-    # 2. Handle compare mode separately
     if args.mode == "compare":
         run_compare_mode(args)
-        return
-    
-    # 3. Load and setup configuration for other modes
-    config_manager, play_config, model_path, stats_path = load_and_setup_play_config(args)
-    
-    # 4. Print configuration information
-    print_play_configuration(play_config)
-    
-    # 5. Run selected mode
-    run_selected_mode(config_manager, play_config, model_path, stats_path)
+    else:
+        run_selected_mode(args)
 
 
 if __name__ == "__main__":

@@ -58,6 +58,12 @@ python play.py --mode agent --training_run_dir ./training_runs/
 # AI batch evaluation (no visualization)  
 python play.py --mode batch --num_episodes 100 --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/
 
+# Compare all experiments in training_runs directory
+python play.py --mode compare  --num_episodes 100 --training_run_dir ./training_runs/
+
+# Human play with custom environment
+python play.py --mode human --width 8 --height 8 --n_mines 12
+
 # Override environment settings while using saved model
 python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
   --width 10 --height 10 --n_mines 15 --delay 0.5
@@ -66,21 +72,6 @@ python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_202
 python play.py --mode batch --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
   --checkpoint_steps 500000 --num_episodes 50
 
-# Human play with custom environment
-python play.py --mode human --width 8 --height 8 --n_mines 12
-
-# Load from config file instead of training run
-python play.py --mode agent --config ./configs/my_config.json
-```
-
-### Model Comparison
-
-The compare mode allows you to evaluate and compare the performance of multiple trained models:
-
-```bash
-# Compare all experiments in training_runs directory
-python play.py --mode compare --training_run_dir ./training_runs/ --num_episodes 100
-
 # Compare specific model directories
 python play.py --mode compare --model_dirs \
   ./training_runs/model1/ \
@@ -88,16 +79,9 @@ python play.py --mode compare --model_dirs \
   ./training_runs/model3/ \
   --num_episodes 50
 
-# Compare with custom settings
-python play.py --mode compare --training_run_dir ./training_runs/ \
-  --num_episodes 200 --device cpu --seed 42
+# Load from config file instead of training run
+python play.py --mode agent --config ./configs/my_config.json
 ```
-
-The compare mode automatically:
-- Finds the latest checkpoint (final_model.zip) from each experiment
-- Runs the specified number of episodes for each model
-- Displays a ranked comparison table with win rates, average steps, and rewards
-- Identifies the best performing model
 
 ### Continue Training
 
@@ -215,16 +199,9 @@ minesweeper_rl/
 │   │   └── model_factory.py        # Model creation
 │   └── utils/             # Utilities and legacy config
 │       ├── checkpoint_utils.py     # Checkpoint management
-│       └── config.py              # Legacy config (for backward compatibility)
 ├── tests/                 # Unit tests
-│   ├── test_config_manager.py     # Configuration system tests
-│   ├── test_config_schemas.py     # Schema validation tests
-│   ├── test_environment_factory.py # Environment factory tests
-│   └── test_model_factory.py      # Model factory tests
 ├── train.py              # Training script (new config system)
 ├── play.py               # Playing/evaluation script (new config system)
-├── train_legacy.py       # Legacy training script
-├── play_legacy.py        # Legacy playing script
 ├── requirements.txt      # Python dependencies
 └── README.md            # This file
 ```
