@@ -9,7 +9,11 @@ from src.utils.checkpoint_utils import (
     extract_steps_from_checkpoint, 
     find_best_checkpoint,
     load_training_config,
-    find_vecnormalize_stats
+    find_vecnormalize_stats,
+    find_all_experiment_dirs,
+    find_latest_experiment_dir,
+    resolve_model_paths_from_run_dir,
+    resolve_continue_training_paths
 )
 
 
@@ -385,3 +389,337 @@ class TestFindVecnormalizeStats:
         stats_path = find_vecnormalize_stats(checkpoint)
         assert stats_path is not None
         assert os.path.basename(stats_path) == last_candidate
+
+
+class TestFindAllExperimentDirs:
+    """Test find_all_experiment_dirs functionality."""
+    
+    def test_find_all_experiment_dirs_basic(self, temp_dir):
+        """Test finding all experiment directories in training_runs folder."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create mock experiment directories with typical naming pattern
+        experiment_names = [
+            "mw_ppo_5x5x3_seed42_20250705152544",
+            "mw_ppo_8x8x10_seed123_20250706081004",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618"
+        ]
+        
+        for exp_name in experiment_names:
+            exp_dir = os.path.join(training_runs_dir, exp_name)
+            models_dir = os.path.join(exp_dir, "models")
+            os.makedirs(models_dir)
+            
+            # Create a final model in each
+            Path(os.path.join(models_dir, "final_model.zip")).touch()
+        
+        # Test the function
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        assert len(experiment_dirs) == 3
+        assert all(os.path.isdir(exp_dir) for exp_dir in experiment_dirs)
+        
+        # Check that all expected directories are found
+        exp_dir_names = [os.path.basename(d) for d in experiment_dirs]
+        for exp_name in experiment_names:
+            assert exp_name in exp_dir_names
+    
+    def test_find_all_experiment_dirs_empty(self, temp_dir):
+        """Test behavior with empty training_runs directory."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        assert experiment_dirs == []
+    
+    def test_find_all_experiment_dirs_nonexistent(self, temp_dir):
+        """Test behavior with non-existent directory."""
+        nonexistent_dir = os.path.join(temp_dir, "does_not_exist")
+        
+        experiment_dirs = find_all_experiment_dirs(nonexistent_dir)
+        assert experiment_dirs == []
+    
+    def test_find_all_experiment_dirs_filters_non_experiments(self, temp_dir):
+        """Test that non-experiment directories are filtered out."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create valid experiment directory
+        exp_dir = os.path.join(training_runs_dir, "mw_ppo_5x5x3_seed42_20250705152544")
+        models_dir = os.path.join(exp_dir, "models")
+        os.makedirs(models_dir)
+        
+        # Create non-experiment directories/files
+        os.makedirs(os.path.join(training_runs_dir, "README"))
+        Path(os.path.join(training_runs_dir, "config.json")).touch()
+        os.makedirs(os.path.join(training_runs_dir, ".git"))
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        # Should only find the valid experiment directory
+        assert len(experiment_dirs) == 1
+        assert os.path.basename(experiment_dirs[0]) == "mw_ppo_5x5x3_seed42_20250705152544"
+    
+    def test_find_all_experiment_dirs_sorted_by_timestamp(self, temp_dir):
+        """Test that experiment directories are sorted by timestamp (newest first)."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create experiment directories with different timestamps
+        experiment_names = [
+            "mw_ppo_5x5x3_seed42_20250705152544",  # oldest
+            "mw_ppo_5x5x3_seed42_20250706081004",  # newest
+            "mw_ppo_5x5x3_seed42_20250705160718"   # middle
+        ]
+        
+        for exp_name in experiment_names:
+            exp_dir = os.path.join(training_runs_dir, exp_name)
+            models_dir = os.path.join(exp_dir, "models")
+            os.makedirs(models_dir)
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        # Should be sorted by timestamp (newest first)
+        exp_dir_names = [os.path.basename(d) for d in experiment_dirs]
+        assert exp_dir_names[0] == "mw_ppo_5x5x3_seed42_20250706081004"  # newest
+        assert exp_dir_names[1] == "mw_ppo_5x5x3_seed42_20250705160718"  # middle
+        assert exp_dir_names[2] == "mw_ppo_5x5x3_seed42_20250705152544"  # oldest
+    
+    def test_find_all_experiment_dirs_with_continue_training(self, temp_dir):
+        """Test handling of continue training directories."""
+        training_runs_dir = os.path.join(temp_dir, "training_runs")
+        os.makedirs(training_runs_dir)
+        
+        # Create original and continue training directories
+        exp_names = [
+            "mw_ppo_5x5x3_seed42_20250705160718",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705170000"
+        ]
+        
+        for exp_name in exp_names:
+            exp_dir = os.path.join(training_runs_dir, exp_name)
+            models_dir = os.path.join(exp_dir, "models")
+            os.makedirs(models_dir)
+        
+        experiment_dirs = find_all_experiment_dirs(training_runs_dir)
+        
+        # Should find all three as separate experiments
+        assert len(experiment_dirs) == 3
+        
+        # Check they're sorted by timestamp (newest continue first)
+        exp_dir_names = [os.path.basename(d) for d in experiment_dirs]
+        assert exp_dir_names[0] == "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705170000"
+        assert exp_dir_names[1] == "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618"
+        assert exp_dir_names[2] == "mw_ppo_5x5x3_seed42_20250705160718"
+
+
+class TestFindLatestExperimentDir:
+    """Test find_latest_experiment_dir functionality."""
+    
+    def test_find_latest_experiment_dir_basic(self, temp_dir):
+        """Test finding the latest experiment directory."""
+        experiment_base_dir = os.path.join(temp_dir, "experiments")
+        os.makedirs(experiment_base_dir)
+        
+        # Create experiment directories with different timestamps
+        exp_dirs = [
+            "mw_ppo_5x5x3_seed42_20250705152544",  # oldest
+            "mw_ppo_5x5x3_seed42_20250706081004",  # newest
+            "mw_ppo_5x5x3_seed42_20250705160718"   # middle
+        ]
+        
+        for exp_dir in exp_dirs:
+            os.makedirs(os.path.join(experiment_base_dir, exp_dir))
+        
+        latest_dir = find_latest_experiment_dir(experiment_base_dir)
+        
+        # Should return the directory with latest timestamp
+        assert os.path.basename(latest_dir) == "mw_ppo_5x5x3_seed42_20250706081004"
+        assert os.path.exists(latest_dir)
+    
+    def test_find_latest_experiment_dir_no_experiments(self, temp_dir):
+        """Test behavior when no experiment directories exist."""
+        experiment_base_dir = os.path.join(temp_dir, "experiments")
+        os.makedirs(experiment_base_dir)
+        
+        with pytest.raises(FileNotFoundError, match="No experiment directories found"):
+            find_latest_experiment_dir(experiment_base_dir)
+    
+    def test_find_latest_experiment_dir_nonexistent_base(self, temp_dir):
+        """Test behavior when base directory doesn't exist."""
+        nonexistent_dir = os.path.join(temp_dir, "does_not_exist")
+        
+        with pytest.raises(FileNotFoundError, match="Experiment directory does not exist"):
+            find_latest_experiment_dir(nonexistent_dir)
+    
+    def test_find_latest_experiment_dir_with_continue(self, temp_dir):
+        """Test with continue training directories."""
+        experiment_base_dir = os.path.join(temp_dir, "experiments")
+        os.makedirs(experiment_base_dir)
+        
+        # Create directories including continue training
+        exp_dirs = [
+            "mw_ppo_5x5x3_seed42_20250705160718",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705163618",
+            "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705170000"  # latest
+        ]
+        
+        for exp_dir in exp_dirs:
+            os.makedirs(os.path.join(experiment_base_dir, exp_dir))
+        
+        latest_dir = find_latest_experiment_dir(experiment_base_dir)
+        
+        # Should return the continue directory with latest timestamp
+        assert os.path.basename(latest_dir) == "mw_ppo_5x5x3_seed42_20250705160718_continue_20250705170000"
+    
+    def test_find_latest_experiment_dir_filters_non_experiments(self, temp_dir):
+        """Test that non-experiment directories are filtered out."""
+        experiment_base_dir = os.path.join(temp_dir, "experiments")
+        os.makedirs(experiment_base_dir)
+        
+        # Create various directories
+        os.makedirs(os.path.join(experiment_base_dir, "mw_ppo_5x5x3_seed42_20250705152544"))
+        os.makedirs(os.path.join(experiment_base_dir, "README"))
+        os.makedirs(os.path.join(experiment_base_dir, "config_files"))
+        Path(os.path.join(experiment_base_dir, "notes.txt")).touch()
+        
+        latest_dir = find_latest_experiment_dir(experiment_base_dir)
+        
+        # Should only find the valid experiment directory
+        assert os.path.basename(latest_dir) == "mw_ppo_5x5x3_seed42_20250705152544"
+
+
+class TestResolveModelPathsFromRunDir:
+    """Test resolve_model_paths_from_run_dir functionality."""
+    
+    def test_resolve_model_paths_from_training_dir(self, mock_training_run_dir):
+        """Test resolving paths from a standard training run directory."""
+        model_path, stats_path = resolve_model_paths_from_run_dir(mock_training_run_dir)
+        
+        # Should find final_model.zip
+        assert model_path is not None
+        assert os.path.basename(model_path) == "final_model.zip"
+        assert os.path.exists(model_path)
+        
+        # Should find corresponding stats
+        assert stats_path is not None
+        assert "vecnormalize" in os.path.basename(stats_path)
+    
+    def test_resolve_model_paths_from_models_dir(self, mock_checkpoint_dir):
+        """Test resolving paths when given models directory directly."""
+        model_path, stats_path = resolve_model_paths_from_run_dir(mock_checkpoint_dir)
+        
+        # Should handle models directory directly
+        assert model_path is not None
+        assert os.path.basename(model_path) == "final_model.zip"
+    
+    def test_resolve_model_paths_with_specific_checkpoint(self, mock_training_run_dir):
+        """Test resolving paths with specific checkpoint steps."""
+        model_path, stats_path = resolve_model_paths_from_run_dir(mock_training_run_dir, checkpoint_steps=50000)
+        
+        # Should find the 50000 checkpoint
+        assert model_path is not None
+        assert "50000" in os.path.basename(model_path)
+    
+    def test_resolve_model_paths_no_models_dir(self, temp_dir):
+        """Test behavior when no models directory exists."""
+        empty_run_dir = os.path.join(temp_dir, "empty_run")
+        os.makedirs(empty_run_dir)
+        
+        with pytest.raises(Exception, match="Could not resolve model paths"):
+            resolve_model_paths_from_run_dir(empty_run_dir)
+    
+    def test_resolve_model_paths_no_checkpoints(self, temp_dir):
+        """Test behavior when models directory exists but has no checkpoints."""
+        run_dir = os.path.join(temp_dir, "run_dir")
+        models_dir = os.path.join(run_dir, "models")
+        os.makedirs(models_dir)
+        
+        with pytest.raises(Exception, match="Could not resolve model paths"):
+            resolve_model_paths_from_run_dir(run_dir)
+    
+    def test_resolve_model_paths_output_messages(self, mock_training_run_dir, capsys):
+        """Test that appropriate messages are printed."""
+        model_path, stats_path = resolve_model_paths_from_run_dir(mock_training_run_dir)
+        
+        captured = capsys.readouterr()
+        assert "Selected checkpoint:" in captured.out
+        assert "Found VecNormalize stats:" in captured.out or "Warning: No VecNormalize stats" in captured.out
+
+
+class TestResolveContinueTrainingPaths:
+    """Test resolve_continue_training_paths functionality."""
+    
+    def test_resolve_continue_training_from_training_dir(self, mock_training_run_dir):
+        """Test resolving continue training paths from a training run directory."""
+        result = resolve_continue_training_paths(mock_training_run_dir)
+        
+        # Should detect it's a training directory and return correct paths
+        assert result['original_run_dir'] == mock_training_run_dir
+        assert result['checkpoint_dir'] == os.path.join(mock_training_run_dir, "models")
+        assert result['checkpoint_path'] is not None
+        assert os.path.basename(result['checkpoint_path']) == "final_model.zip"
+        assert result['is_training_dir'] is True
+    
+    def test_resolve_continue_training_from_models_dir(self, mock_checkpoint_dir):
+        """Test resolving continue training paths from a models directory directly."""
+        result = resolve_continue_training_paths(mock_checkpoint_dir)
+        
+        # Should detect it's already a models directory
+        assert result['original_run_dir'] is None
+        assert result['checkpoint_dir'] == mock_checkpoint_dir
+        assert result['checkpoint_path'] is not None
+        assert os.path.basename(result['checkpoint_path']) == "final_model.zip"
+        assert result['is_training_dir'] is False
+    
+    def test_resolve_continue_training_with_specific_steps(self, mock_training_run_dir):
+        """Test resolving continue training paths with specific checkpoint steps."""
+        result = resolve_continue_training_paths(mock_training_run_dir, continue_steps=50000)
+        
+        # Should find the 50000 step checkpoint
+        assert result['checkpoint_path'] is not None
+        assert "50000" in os.path.basename(result['checkpoint_path'])
+        assert result['original_run_dir'] == mock_training_run_dir
+    
+    def test_resolve_continue_training_no_checkpoints(self, temp_dir):
+        """Test behavior when directory has no checkpoints."""
+        empty_run_dir = os.path.join(temp_dir, "empty_run")
+        models_dir = os.path.join(empty_run_dir, "models")
+        os.makedirs(models_dir)
+        
+        with pytest.raises(Exception, match="No checkpoint files found"):
+            resolve_continue_training_paths(empty_run_dir)
+    
+    def test_resolve_continue_training_nonexistent_dir(self, temp_dir):
+        """Test behavior with non-existent directory."""
+        nonexistent_dir = os.path.join(temp_dir, "does_not_exist")
+        
+        with pytest.raises(Exception, match="Continue training directory does not exist"):
+            resolve_continue_training_paths(nonexistent_dir)
+    
+    def test_resolve_continue_training_empty_models_dir(self, temp_dir):
+        """Test behavior when models directory exists but is empty."""
+        run_dir = os.path.join(temp_dir, "run_with_empty_models")
+        models_dir = os.path.join(run_dir, "models")
+        os.makedirs(models_dir)
+        
+        with pytest.raises(Exception, match="No checkpoint files found"):
+            resolve_continue_training_paths(run_dir)
+    
+    def test_resolve_continue_training_output_messages(self, mock_training_run_dir, capsys):
+        """Test that appropriate messages are printed."""
+        result = resolve_continue_training_paths(mock_training_run_dir)
+        
+        captured = capsys.readouterr()
+        assert "Found checkpoint to continue from:" in captured.out
+        assert "Detected training run directory" in captured.out
+    
+    def test_resolve_continue_training_models_dir_output(self, mock_checkpoint_dir, capsys):
+        """Test output messages when given models directory directly."""
+        result = resolve_continue_training_paths(mock_checkpoint_dir)
+        
+        captured = capsys.readouterr()
+        assert "Found checkpoint to continue from:" in captured.out
+        assert "Using models directory directly" in captured.out

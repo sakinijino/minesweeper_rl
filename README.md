@@ -58,6 +58,12 @@ python play.py --mode agent --training_run_dir ./training_runs/
 # AI batch evaluation (no visualization)  
 python play.py --mode batch --num_episodes 100 --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/
 
+# Compare all experiments in training_runs directory
+python play.py --mode compare  --num_episodes 100 --training_run_dir ./training_runs/
+
+# Human play with custom environment
+python play.py --mode human --width 8 --height 8 --n_mines 12
+
 # Override environment settings while using saved model
 python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
   --width 10 --height 10 --n_mines 15 --delay 0.5
@@ -66,8 +72,12 @@ python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_202
 python play.py --mode batch --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
   --checkpoint_steps 500000 --num_episodes 50
 
-# Human play with custom environment
-python play.py --mode human --width 8 --height 8 --n_mines 12
+# Compare specific model directories
+python play.py --mode compare --model_dirs \
+  ./training_runs/model1/ \
+  ./training_runs/model2/ \
+  ./training_runs/model3/ \
+  --num_episodes 50
 
 # Load from config file instead of training run
 python play.py --mode agent --config ./configs/my_config.json
@@ -104,7 +114,7 @@ tensorboard --logdir ./training_runs/
 - **MaskablePPO**: Prevents invalid moves (clicking revealed cells)
 - **Custom CNN**: Optimized for grid-based input processing
 - **Advanced Configuration System**: YAML/JSON-based config with parameter priority system
-- **Multiple Play Modes**: AI demonstration, batch evaluation, human play
+- **Multiple Play Modes**: AI demonstration, batch evaluation, human play, model comparison
 - **TensorBoard Integration**: Monitor training progress
 - **Checkpoint System**: Resume training from any checkpoint
 - **Factory Pattern**: Modular environment and model creation
@@ -127,6 +137,7 @@ tensorboard --logdir ./training_runs/
 | `agent` | AI plays with visualization | `--mode agent` |
 | `batch` | AI evaluation without graphics | `--mode batch` |
 | `human` | Human player with mouse input | `--mode human` |
+| `compare` | Compare multiple models performance | `--mode compare` |
 
 ## Model Loading Options
 
@@ -134,6 +145,7 @@ tensorboard --logdir ./training_runs/
 |-----------|-------------|-------|
 | `--model_dir` | Load from specific model directory | `--model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/` |
 | `--training_run_dir` | Load latest model from experiment directory | `--training_run_dir ./training_runs/` |
+| `--model_dirs` | Multiple model directories (compare mode only) | `--model_dirs ./model1/ ./model2/ ./model3/` |
 | `--config` | Load from configuration file | `--config ./configs/my_config.json` |
 
 ## Configuration System
@@ -187,16 +199,9 @@ minesweeper_rl/
 │   │   └── model_factory.py        # Model creation
 │   └── utils/             # Utilities and legacy config
 │       ├── checkpoint_utils.py     # Checkpoint management
-│       └── config.py              # Legacy config (for backward compatibility)
 ├── tests/                 # Unit tests
-│   ├── test_config_manager.py     # Configuration system tests
-│   ├── test_config_schemas.py     # Schema validation tests
-│   ├── test_environment_factory.py # Environment factory tests
-│   └── test_model_factory.py      # Model factory tests
 ├── train.py              # Training script (new config system)
 ├── play.py               # Playing/evaluation script (new config system)
-├── train_legacy.py       # Legacy training script
-├── play_legacy.py        # Legacy playing script
 ├── requirements.txt      # Python dependencies
 └── README.md            # This file
 ```
