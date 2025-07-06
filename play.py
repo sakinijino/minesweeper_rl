@@ -357,13 +357,14 @@ def run_batch_mode(config_manager, play_config, model_path, stats_path):
         mode='batch',
         vecnormalize_stats_path=stats_path
     )
-    setup_random_seed(config_manager, env, play_config)
     
     # Load model
     model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
     if model is None:
         env.close()
         return
+    
+    setup_random_seed(config_manager, env, play_config)
 
     # Batch game loop
     total_games = 0
@@ -422,6 +423,7 @@ def run_human_mode(config_manager, play_config, stats_path):
         mode='human',
         vecnormalize_stats_path=stats_path
     )
+    
     setup_random_seed(config_manager, env, play_config)
     
     # Human mode doesn't need a model, but VecNormalize stats are handled in environment factory
@@ -531,13 +533,14 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
         mode='agent',
         vecnormalize_stats_path=stats_path
     )
-    setup_random_seed(config_manager, env, play_config)
     
     # Load model
     model, env = load_model_and_environment(config_manager, env, model_path, stats_path)
     if model is None:
         env.close()
         return
+    
+    setup_random_seed(config_manager, env, play_config)
 
     # Game statistics
     total_games = 0
