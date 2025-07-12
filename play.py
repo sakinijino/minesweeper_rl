@@ -291,7 +291,7 @@ def run_interactive_game_loop(env, env_instance, action_provider, play_config, m
         running = True
         while running:
             # Get action from provider (human input, AI model, etc.)
-            action, should_quit = action_provider(obs, env_instance)
+            action, delay, should_quit = action_provider(obs, env_instance)
             
             if should_quit:
                 running = False
@@ -313,6 +313,12 @@ def run_interactive_game_loop(env, env_instance, action_provider, play_config, m
                 
                 # Render after action
                 env_instance.render()
+                # Non-blocking delay for human observation
+                env_instance.wait_seconds(delay)
+                while env_instance.is_waiting():
+                    if env_instance.check_quit_key():
+                        return None, True
+                    env_instance.render()
 
                 # Check game end
                 if terminated or truncated:
@@ -329,15 +335,6 @@ def run_interactive_game_loop(env, env_instance, action_provider, play_config, m
                     print(f"Final Reward: {total_reward:.2f}, Steps: {step_count}")
                     current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
                     print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
-
-                    # Non-blocking pause to display results
-                    env_instance.wait_seconds(play_config.delay)
-                    while env_instance.is_waiting():
-                        _, quit_check = action_provider(obs, env_instance, pause_mode=True)
-                        if quit_check:
-                            running = False
-                            break
-                        env_instance.render()
                     
                     if running:
                         print("Resetting environment...")
@@ -501,7 +498,7 @@ def run_human_mode(config_manager, play_config, stats_path):
         # Normal gameplay - get user action
         user_action, quit_flag = env_instance.get_user_action()
         action = [user_action] if user_action is not None else None
-        return action, quit_flag
+        return action, 0, quit_flag
     
     # Use universal interactive game loop
     return run_interactive_game_loop(env, env_instance, get_human_action, play_config, "Human")
@@ -550,14 +547,7 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
         
         print(f"Agent action: {action}")
         
-        # Non-blocking delay for human observation
-        env_instance.wait_seconds(play_config.delay)
-        while env_instance.is_waiting():
-            if env_instance.check_quit_key():
-                return None, True
-            env_instance.render()
-        
-        return action, False
+        return action, play_config.delay, False
     
     # Use universal interactive game loop
     return run_interactive_game_loop(env, env_instance, get_agent_action, play_config, "Agent")

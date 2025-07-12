@@ -161,7 +161,6 @@ class MinesweeperEnv(gym.Env):
         if self.revealed[row, col]:
             # 点击已揭开的格子 -> 惩罚
             reward = self.reward_invalid
-            # terminated = True # 可以选择是否因此结束游戏
         elif self.mines[row, col]:
             # 点击到地雷 -> 失败，大惩罚
             reward = self.reward_lose
