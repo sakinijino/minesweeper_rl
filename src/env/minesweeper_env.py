@@ -1,7 +1,6 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-import pygame
 import random
 
 class MinesweeperEnv(gym.Env):
@@ -40,6 +39,7 @@ class MinesweeperEnv(gym.Env):
         self.action_space = spaces.Discrete(self.action_space_size)
 
         # Pygame 初始化 (仅在需要渲染时)
+        self._pygame = None  # Lazy-loaded pygame module
         self.window = None
         self.clock = None
         self.cell_size = 30 # 可调整单元格大小
@@ -71,7 +71,7 @@ class MinesweeperEnv(gym.Env):
 
     def _get_info(self):
         # 返回辅助信息，例如剩余地雷数、是否胜利等
-        return {"remaining_mines": self.n_mines - np.sum(self.flags),
+        return {"remaining_mines": self.n_mines,
                 "revealed_cells": np.sum(self.revealed),
                 "is_success": self.win}
 
@@ -82,7 +82,6 @@ class MinesweeperEnv(gym.Env):
         self.board = np.full(self.grid_size, -2, dtype=np.int32) # -2: 未揭开
         self.mines = np.zeros(self.grid_size, dtype=bool)
         self.revealed = np.zeros(self.grid_size, dtype=bool)
-        self.flags = np.zeros(self.grid_size, dtype=bool) # (可选) 添加标记功能
 
         # 随机布雷
         mine_indices = self.np_random.choice(self.action_space_size, self.n_mines, replace=False)
@@ -232,9 +231,18 @@ class MinesweeperEnv(gym.Env):
             return self._render_frame()
         # human 模式下，_render_frame 已经在 step 和 reset 中调用
 
-    def _render_frame(self):
-        if self.window is None and self.render_mode == "human":
+    def _get_pygame(self):
+        """Lazy load pygame module to avoid import warnings in headless environments."""
+        if self._pygame is None:
+            import pygame
+            self._pygame = pygame
             pygame.init()
+        return self._pygame
+    
+    def _render_frame(self):
+        pygame = self._get_pygame()  # Lazy load pygame
+        
+        if self.window is None and self.render_mode == "human":
             pygame.display.init()
             self.window = pygame.display.set_mode(self.window_size)
             pygame.display.set_caption("Minesweeper RL")
@@ -267,8 +275,6 @@ class MinesweeperEnv(gym.Env):
                     # cell_value == 0 时不显示数字
                 else:
                     pygame.draw.rect(canvas, (180, 180, 180), rect) # 未揭开背景
-                    if self.flags[r, c]: # 显示旗帜 (如果实现)
-                         text_surface = self.font.render("F", True, (255, 0, 0))
 
                 if text_surface:
                     text_rect = text_surface.get_rect(center=rect.center)
@@ -282,12 +288,59 @@ class MinesweeperEnv(gym.Env):
         else: # rgb_array
             return np.transpose(np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2))
 
+    def get_user_action(self):
+        """
+        Get user action from pygame events.
+        Returns action index or None if no action.
+        Also returns a quit flag.
+        """
+        if self.render_mode != "human" or self._pygame is None:
+            return None, False
+        
+        pygame = self._pygame
+        action = None
+        quit_flag = False
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                quit_flag = True
+                break
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos
+                col = x // self.cell_size
+                row = y // self.cell_size
+                
+                if (0 <= row < self.height and 
+                    0 <= col < self.width and 
+                    not self.revealed[row, col]):
+                    action = row * self.width + col
+        
+        return action, quit_flag
+    
+    def check_quit_key(self):
+        """
+        Check if user pressed quit key (Q).
+        Returns True if quit key was pressed.
+        """
+        if self.render_mode != "human" or self._pygame is None:
+            return False
+            
+        pygame = self._pygame
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return True
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_q:
+                    return True
+        return False
+    
     def close(self):
-        if self.window is not None:
-            pygame.display.quit()
-            pygame.quit()
+        if self.window is not None and self._pygame is not None:
+            self._pygame.display.quit()
+            self._pygame.quit()
             self.window = None
             self.clock = None
+            self._pygame = None
 
 # (可选) 注册环境，方便 gym.make() 调用
 # from gymnasium.envs.registration import register

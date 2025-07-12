@@ -1,7 +1,6 @@
 # play_new.py - Refactored play script with new configuration system
 import os
 import gymnasium as gym
-import pygame
 import time
 import argparse
 import numpy as np
@@ -410,23 +409,13 @@ def run_human_mode(config_manager, play_config, stats_path):
         while running:
             action = None
 
-            # Handle Pygame events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                    break
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # Human click input
-                    x, y = event.pos
-                    col = x // env_instance.cell_size
-                    row = y // env_instance.cell_size
-                    
-                    if (0 <= row < env_instance.height and 
-                        0 <= col < env_instance.width and 
-                        not env_instance.revealed[row, col]):
-                        action = [row * env_instance.width + col]
-                    else:
-                        print("Cell already revealed or out of bounds.")
+            # Handle user input through environment
+            user_action, quit_flag = env_instance.get_user_action()
+            if quit_flag:
+                running = False
+                break
+            elif user_action is not None:
+                action = [user_action]
 
             if not running:
                 break
@@ -522,16 +511,10 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
 
         running = True
         while running:
-            # Handle Pygame events (mainly quit events)
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                    break
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q:
-                        print("Quitting agent mode...")
-                        running = False
-                        break
+            # Check for quit events through environment
+            if env_instance.check_quit_key():
+                print("Quitting agent mode...")
+                running = False
 
             if not running:
                 break
