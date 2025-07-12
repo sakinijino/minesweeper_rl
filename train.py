@@ -1,21 +1,17 @@
-# train_new.py - Refactored training script with new configuration system
 import os, datetime
 import argparse
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import CheckpointCallback
 
-# Import environment and model factories
+from src.config.config_manager import ConfigManager
+
 from src.factories.model_factory import create_model
 from src.factories.environment_factory import create_training_environment
 
-# Legacy config import removed - now using new configuration system
 from src.utils.checkpoint_utils import (
     find_vecnormalize_stats,
     resolve_continue_training_paths
 )
-
-# Import new configuration system
-from src.config.config_manager import ConfigManager
 
 
 def setup_argument_parser():
