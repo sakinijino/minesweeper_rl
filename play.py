@@ -450,8 +450,18 @@ def run_human_mode(config_manager, play_config, stats_path):
                     current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
                     print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
 
-                    time.sleep(2)  # Pause to display results
-                    print("Resetting environment...")
+                    # Non-blocking pause to display results
+                    env_instance.wait_seconds(2)
+                    # Keep rendering during the pause
+                    while env_instance.is_waiting():
+                        user_action, quit_flag = env_instance.get_user_action()
+                        if quit_flag:
+                            running = False
+                            break
+                        env_instance._render_frame()
+                    
+                    if running:
+                        print("Resetting environment...")
                     obs = env.reset()
                     total_reward = 0
                     step_count = 0
@@ -524,7 +534,16 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
             action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
             
             print(f"Agent action: {action}")
-            time.sleep(play_config.delay)  # Delay for observation
+            # Non-blocking delay for observation
+            env_instance.wait_seconds(play_config.delay)
+            while env_instance.is_waiting():
+                if env_instance.check_quit_key():
+                    running = False
+                    break
+                env_instance._render_frame()
+            
+            if not running:
+                break
 
             # Execute action
             obs, reward, terminated_arr, info_arr = env.step(action)
@@ -555,8 +574,16 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
                 current_win_rate = (agent_wins / total_games * 100) if total_games > 0 else 0
                 print(f"--- Stats so far --- Games: {total_games}, Wins: {agent_wins}, Win Rate: {current_win_rate:.2f}% ---")
 
-                time.sleep(2)  # Pause to display results
-                print("Resetting environment...")
+                # Non-blocking pause to display results
+                env_instance.wait_seconds(2)
+                while env_instance.is_waiting():
+                    if env_instance.check_quit_key():
+                        running = False
+                        break
+                    env_instance._render_frame()
+                
+                if running:
+                    print("Resetting environment...")
                 obs = env.reset()
                 total_reward = 0
                 step_count = 0

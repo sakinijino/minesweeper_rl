@@ -28,7 +28,8 @@ class EnvironmentCreationError(Exception):
 
 def create_env_config(
     config_manager: ConfigManager,
-    render_mode: Optional[str] = None
+    render_mode: Optional[str] = None,
+    render_fps: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Create environment configuration dictionary from ConfigManager.
@@ -36,6 +37,7 @@ def create_env_config(
     Args:
         config_manager: ConfigManager instance containing all configuration
         render_mode: Rendering mode ('human', 'rgb_array', None)
+        render_fps: Frame rate for rendering (defaults to mode-appropriate value)
         
     Returns:
         Dictionary containing environment configuration
@@ -56,6 +58,15 @@ def create_env_config(
             raise ValueError(f"ConfigManager.environment_config.{attr} is None. "
                            f"ConfigManager must provide all default values.")
     
+    # Determine appropriate FPS based on mode if not specified
+    if render_fps is None:
+        if render_mode == 'human':
+            render_fps = 60  # High FPS for responsive human interaction
+        elif render_mode == 'rgb_array':
+            render_fps = 30  # Medium FPS for agent visualization
+        else:
+            render_fps = 30  # Default FPS for other cases
+    
     env_config = {
         'width': env_config_obj.width,
         'height': env_config_obj.height,
@@ -65,7 +76,8 @@ def create_env_config(
         'reward_reveal': env_config_obj.reward_reveal,
         'reward_invalid': env_config_obj.reward_invalid,
         'max_reward_per_step': env_config_obj.max_reward_per_step,
-        'render_mode': render_mode
+        'render_mode': render_mode,
+        'render_fps': render_fps
     }
     
     return env_config

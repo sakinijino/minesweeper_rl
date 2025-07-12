@@ -4,11 +4,11 @@ import numpy as np
 import random
 
 class MinesweeperEnv(gym.Env):
-    metadata = {'render_modes': ['human', 'rgb_array'], 'render_fps': 4}
+    metadata = {'render_modes': ['human', 'rgb_array']}
 
     def __init__(self, width=10, height=10, n_mines=10, render_mode='human',
                  reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1,
-                 max_reward_per_step=None):
+                 max_reward_per_step=None, render_fps=30):
         super().__init__()
 
         self.width = width
@@ -17,6 +17,11 @@ class MinesweeperEnv(gym.Env):
         self.grid_size = (height, width)
         self.action_space_size = height * width
         self.render_mode = render_mode
+        self.render_fps = render_fps  # Configurable FPS
+        
+        # Non-blocking delay system
+        self.pause_counter = 0  # Frame counter for pauses
+        self.is_paused = False  # Whether currently in pause state
 
         # 奖励设置
         self.reward_win = reward_win  # 胜利奖励
@@ -284,7 +289,14 @@ class MinesweeperEnv(gym.Env):
             self.window.blit(canvas, canvas.get_rect())
             pygame.event.pump()
             pygame.display.update()
-            self.clock.tick(self.metadata["render_fps"])
+            
+            # Handle pause state (non-blocking delay)
+            if self.is_paused:
+                self.pause_counter -= 1
+                if self.pause_counter <= 0:
+                    self.is_paused = False
+            
+            self.clock.tick(self.render_fps)
         else: # rgb_array
             return np.transpose(np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2))
 
@@ -333,6 +345,35 @@ class MinesweeperEnv(gym.Env):
                 if event.key == pygame.K_q:
                     return True
         return False
+    
+    def wait_frames(self, frames):
+        """
+        Non-blocking wait for specified number of frames.
+        
+        Args:
+            frames (int): Number of frames to wait
+        """
+        self.pause_counter = frames
+        self.is_paused = True
+    
+    def wait_seconds(self, seconds):
+        """
+        Non-blocking wait for specified seconds (converted to frames).
+        
+        Args:
+            seconds (float): Number of seconds to wait
+        """
+        frames = int(seconds * self.render_fps)
+        self.wait_frames(frames)
+    
+    def is_waiting(self):
+        """
+        Check if environment is currently in a wait state.
+        
+        Returns:
+            bool: True if waiting, False otherwise
+        """
+        return self.is_paused
     
     def close(self):
         if self.window is not None and self._pygame is not None:
