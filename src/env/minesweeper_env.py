@@ -22,6 +22,10 @@ class MinesweeperEnv(gym.Env):
         # Non-blocking delay system
         self.pause_counter = 0  # Frame counter for pauses
         self.is_paused = False  # Whether currently in pause state
+        
+        # Last state caching for proper display during delays
+        self.last_board = None  # Cache of last game state
+        self.last_revealed = None  # Cache of last revealed state
 
         # 奖励设置
         self.reward_win = reward_win  # 胜利奖励
@@ -188,6 +192,10 @@ class MinesweeperEnv(gym.Env):
                 self.game_over = True
                 terminated = True
                 self.win = True
+        
+        # Cache last state (for proper display during delays)
+        self.last_board = self.board.copy()
+        self.last_revealed = self.revealed.copy()
 
         observation = self._get_obs()
         info = self._get_info()
@@ -224,13 +232,18 @@ class MinesweeperEnv(gym.Env):
         # Flatten the mask to match the 1D action space.
         return ~self.revealed.flatten()
 
-    def render(self):
+    def render(self, use_last_state=False):
         """
         Render the environment.
         
         For 'human' mode: Displays the game window and handles frame timing.
         For 'rgb_array' mode: Returns the game state as a numpy array.
         For None mode: Does nothing.
+        
+        Args:
+            use_last_state (bool): If True and last state exists, render the 
+                                    cached last state instead of current state.
+                                    Useful for showing game end state during delays.
         
         Returns:
             numpy.ndarray: RGB array for 'rgb_array' mode, None otherwise.
@@ -251,16 +264,24 @@ class MinesweeperEnv(gym.Env):
         canvas = pygame.Surface(self.window_size)
         canvas.fill((200, 200, 200)) # 背景色
 
+        # Determine which state to render
+        if use_last_state and self.last_board is not None:
+            board_to_render = self.last_board
+            revealed_to_render = self.last_revealed
+        else:
+            board_to_render = self.board
+            revealed_to_render = self.revealed
+
         for r in range(self.height):
             for c in range(self.width):
                 rect = pygame.Rect(c * self.cell_size, r * self.cell_size, self.cell_size, self.cell_size)
                 pygame.draw.rect(canvas, (100, 100, 100), rect, 1) # 网格线
 
-                cell_value = self.board[r, c]
+                cell_value = board_to_render[r, c]
                 text_surface = None
                 text_color = (0, 0, 0)
 
-                if self.revealed[r, c]:
+                if revealed_to_render[r, c]:
                     pygame.draw.rect(canvas, (230, 230, 230), rect) # 已揭开背景
                     if cell_value == -1: # 踩到雷
                          text_surface = self.font.render("X", True, (255, 0, 0))

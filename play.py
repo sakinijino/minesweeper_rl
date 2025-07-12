@@ -311,15 +311,6 @@ def run_interactive_game_loop(env, env_instance, action_provider, play_config, m
                 
                 print(f"Step: {step_count}, Action: {action[0] if isinstance(action, list) else action}, Reward: {reward:.2f}, Done: {terminated}")
                 
-                # Render after action
-                env_instance.render()
-                # Non-blocking delay for human observation
-                env_instance.wait_seconds(delay)
-                while env_instance.is_waiting():
-                    if env_instance.check_quit_key():
-                        return None, True
-                    env_instance.render()
-
                 # Check game end
                 if terminated or truncated:
                     total_games += 1
@@ -336,6 +327,15 @@ def run_interactive_game_loop(env, env_instance, action_provider, play_config, m
                     current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
                     print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
                     
+                    # Show terminal state during delay
+                    env_instance.wait_seconds(play_config.delay)
+                    while env_instance.is_waiting():
+                        if env_instance.check_quit_key():
+                            running = False
+                            break
+                        # Render terminal state instead of current state
+                        env_instance.render(use_last_state=True)
+                    
                     if running:
                         print("Resetting environment...")
                         obs = env.reset()
@@ -345,6 +345,15 @@ def run_interactive_game_loop(env, env_instance, action_provider, play_config, m
                         terminated = False
                         truncated = False
                         current_game_won = False
+
+                # Render after action
+                env_instance.render()
+                # Non-blocking delay for human observation
+                env_instance.wait_seconds(delay)
+                while env_instance.is_waiting():
+                    if env_instance.check_quit_key():
+                        return None, True
+                    env_instance.render()
             else:
                 # No action, still render to keep display updated
                 env_instance.render()
