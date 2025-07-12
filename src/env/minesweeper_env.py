@@ -1,15 +1,14 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-import pygame
 import random
 
 class MinesweeperEnv(gym.Env):
-    metadata = {'render_modes': ['human', 'rgb_array'], 'render_fps': 4}
+    metadata = {'render_modes': ['human', 'rgb_array']}
 
     def __init__(self, width=10, height=10, n_mines=10, render_mode='human',
                  reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1,
-                 max_reward_per_step=None):
+                 max_reward_per_step=None, render_fps=30):
         super().__init__()
 
         self.width = width
@@ -18,6 +17,15 @@ class MinesweeperEnv(gym.Env):
         self.grid_size = (height, width)
         self.action_space_size = height * width
         self.render_mode = render_mode
+        self.render_fps = render_fps  # Configurable FPS
+        
+        # Non-blocking delay system
+        self.pause_counter = 0  # Frame counter for pauses
+        self.is_paused = False  # Whether currently in pause state
+        
+        # Last state caching for proper display during delays
+        self.last_board = None  # Cache of last game state
+        self.last_revealed = None  # Cache of last revealed state
 
         # 奖励设置
         self.reward_win = reward_win  # 胜利奖励
@@ -40,6 +48,7 @@ class MinesweeperEnv(gym.Env):
         self.action_space = spaces.Discrete(self.action_space_size)
 
         # Pygame 初始化 (仅在需要渲染时)
+        self._pygame = None  # Lazy-loaded pygame module
         self.window = None
         self.clock = None
         self.cell_size = 30 # 可调整单元格大小
@@ -71,7 +80,7 @@ class MinesweeperEnv(gym.Env):
 
     def _get_info(self):
         # 返回辅助信息，例如剩余地雷数、是否胜利等
-        return {"remaining_mines": self.n_mines - np.sum(self.flags),
+        return {"remaining_mines": self.n_mines,
                 "revealed_cells": np.sum(self.revealed),
                 "is_success": self.win}
 
@@ -82,7 +91,6 @@ class MinesweeperEnv(gym.Env):
         self.board = np.full(self.grid_size, -2, dtype=np.int32) # -2: 未揭开
         self.mines = np.zeros(self.grid_size, dtype=bool)
         self.revealed = np.zeros(self.grid_size, dtype=bool)
-        self.flags = np.zeros(self.grid_size, dtype=bool) # (可选) 添加标记功能
 
         # 随机布雷
         mine_indices = self.np_random.choice(self.action_space_size, self.n_mines, replace=False)
@@ -98,9 +106,6 @@ class MinesweeperEnv(gym.Env):
 
         observation = self._get_obs()
         info = self._get_info()
-
-        if self.render_mode == "human":
-            self._render_frame()
 
         return observation, info
 
@@ -160,7 +165,6 @@ class MinesweeperEnv(gym.Env):
         if self.revealed[row, col]:
             # 点击已揭开的格子 -> 惩罚
             reward = self.reward_invalid
-            # terminated = True # 可以选择是否因此结束游戏
         elif self.mines[row, col]:
             # 点击到地雷 -> 失败，大惩罚
             reward = self.reward_lose
@@ -188,12 +192,13 @@ class MinesweeperEnv(gym.Env):
                 self.game_over = True
                 terminated = True
                 self.win = True
+        
+        # Cache last state (for proper display during delays)
+        self.last_board = self.board.copy()
+        self.last_revealed = self.revealed.copy()
 
         observation = self._get_obs()
         info = self._get_info()
-
-        if self.render_mode == "human":
-            self._render_frame()
 
         return observation, reward, terminated, truncated, info
 
@@ -227,14 +232,28 @@ class MinesweeperEnv(gym.Env):
         # Flatten the mask to match the 1D action space.
         return ~self.revealed.flatten()
 
-    def render(self):
-        if self.render_mode == "rgb_array":
-            return self._render_frame()
-        # human 模式下，_render_frame 已经在 step 和 reset 中调用
-
-    def _render_frame(self):
+    def render(self, use_last_state=False):
+        """
+        Render the environment.
+        
+        For 'human' mode: Displays the game window and handles frame timing.
+        For 'rgb_array' mode: Returns the game state as a numpy array.
+        For None mode: Does nothing.
+        
+        Args:
+            use_last_state (bool): If True and last state exists, render the 
+                                    cached last state instead of current state.
+                                    Useful for showing game end state during delays.
+        
+        Returns:
+            numpy.ndarray: RGB array for 'rgb_array' mode, None otherwise.
+        """
+        if self.render_mode is None:
+            return None
+            
+        pygame = self._get_pygame()  # Lazy load pygame
+        
         if self.window is None and self.render_mode == "human":
-            pygame.init()
             pygame.display.init()
             self.window = pygame.display.set_mode(self.window_size)
             pygame.display.set_caption("Minesweeper RL")
@@ -245,16 +264,24 @@ class MinesweeperEnv(gym.Env):
         canvas = pygame.Surface(self.window_size)
         canvas.fill((200, 200, 200)) # 背景色
 
+        # Determine which state to render
+        if use_last_state and self.last_board is not None:
+            board_to_render = self.last_board
+            revealed_to_render = self.last_revealed
+        else:
+            board_to_render = self.board
+            revealed_to_render = self.revealed
+
         for r in range(self.height):
             for c in range(self.width):
                 rect = pygame.Rect(c * self.cell_size, r * self.cell_size, self.cell_size, self.cell_size)
                 pygame.draw.rect(canvas, (100, 100, 100), rect, 1) # 网格线
 
-                cell_value = self.board[r, c]
+                cell_value = board_to_render[r, c]
                 text_surface = None
                 text_color = (0, 0, 0)
 
-                if self.revealed[r, c]:
+                if revealed_to_render[r, c]:
                     pygame.draw.rect(canvas, (230, 230, 230), rect) # 已揭开背景
                     if cell_value == -1: # 踩到雷
                          text_surface = self.font.render("X", True, (255, 0, 0))
@@ -267,8 +294,6 @@ class MinesweeperEnv(gym.Env):
                     # cell_value == 0 时不显示数字
                 else:
                     pygame.draw.rect(canvas, (180, 180, 180), rect) # 未揭开背景
-                    if self.flags[r, c]: # 显示旗帜 (如果实现)
-                         text_surface = self.font.render("F", True, (255, 0, 0))
 
                 if text_surface:
                     text_rect = text_surface.get_rect(center=rect.center)
@@ -278,16 +303,108 @@ class MinesweeperEnv(gym.Env):
             self.window.blit(canvas, canvas.get_rect())
             pygame.event.pump()
             pygame.display.update()
-            self.clock.tick(self.metadata["render_fps"])
+            
+            # Handle pause state (non-blocking delay)
+            if self.is_paused:
+                self.pause_counter -= 1
+                if self.pause_counter <= 0:
+                    self.is_paused = False
+            
+            self.clock.tick(self.render_fps)
+            return None
         else: # rgb_array
             return np.transpose(np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2))
 
+    def _get_pygame(self):
+        """Lazy load pygame module to avoid import warnings in headless environments."""
+        if self._pygame is None:
+            import pygame
+            self._pygame = pygame
+            pygame.init()
+        return self._pygame
+
+    def get_user_action(self):
+        """
+        Get user action from pygame events.
+        Returns action index or None if no action.
+        Also returns a quit flag.
+        """
+        if self.render_mode != "human" or self._pygame is None:
+            return None, False
+        
+        pygame = self._pygame
+        action = None
+        quit_flag = False
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                quit_flag = True
+                break
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos
+                col = x // self.cell_size
+                row = y // self.cell_size
+                
+                if (0 <= row < self.height and 
+                    0 <= col < self.width and 
+                    not self.revealed[row, col]):
+                    action = row * self.width + col
+        
+        return action, quit_flag
+    
+    def check_quit_key(self):
+        """
+        Check if user pressed quit key (Q).
+        Returns True if quit key was pressed.
+        """
+        if self.render_mode != "human" or self._pygame is None:
+            return False
+            
+        pygame = self._pygame
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return True
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_q:
+                    return True
+        return False
+    
+    def wait_frames(self, frames):
+        """
+        Non-blocking wait for specified number of frames.
+        
+        Args:
+            frames (int): Number of frames to wait
+        """
+        self.pause_counter = frames
+        self.is_paused = True
+    
+    def wait_seconds(self, seconds):
+        """
+        Non-blocking wait for specified seconds (converted to frames).
+        
+        Args:
+            seconds (float): Number of seconds to wait
+        """
+        frames = int(seconds * self.render_fps)
+        self.wait_frames(frames)
+    
+    def is_waiting(self):
+        """
+        Check if environment is currently in a wait state.
+        
+        Returns:
+            bool: True if waiting, False otherwise
+        """
+        return self.is_paused
+    
     def close(self):
-        if self.window is not None:
-            pygame.display.quit()
-            pygame.quit()
+        if self.window is not None and self._pygame is not None:
+            self._pygame.display.quit()
+            self._pygame.quit()
             self.window = None
             self.clock = None
+            self._pygame = None
 
 # (可选) 注册环境，方便 gym.make() 调用
 # from gymnasium.envs.registration import register

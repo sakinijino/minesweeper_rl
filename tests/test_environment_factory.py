@@ -43,6 +43,7 @@ class TestEnvConfig:
         assert 'reward_invalid' in config
         assert 'max_reward_per_step' in config
         assert 'render_mode' in config
+        assert 'render_fps' in config
         
         # All values should be non-None except render_mode and max_reward_per_step
         for key, value in config.items():
@@ -58,6 +59,36 @@ class TestEnvConfig:
         # Other values should come from ConfigManager
         assert config['width'] == config_manager.get_config().environment_config.width
         assert config['height'] == config_manager.get_config().environment_config.height
+    
+    def test_create_env_config_with_render_fps(self):
+        """Test creating environment config with custom render FPS."""
+        config_manager = create_test_config_manager()
+        config = create_env_config(config_manager=config_manager, render_fps=60)
+        
+        assert config['render_fps'] == 60
+        # Other values should come from ConfigManager
+        assert config['width'] == config_manager.get_config().environment_config.width
+    
+    def test_create_env_config_with_mode_and_fps(self):
+        """Test creating environment config with both render mode and FPS."""
+        config_manager = create_test_config_manager()
+        config = create_env_config(
+            config_manager=config_manager, 
+            render_mode='human', 
+            render_fps=30
+        )
+        
+        assert config['render_mode'] == 'human'
+        assert config['render_fps'] == 30
+    
+    def test_create_env_config_default_fps(self):
+        """Test that default FPS is used when not specified."""
+        config_manager = create_test_config_manager()
+        config = create_env_config(config_manager=config_manager)
+        
+        # Should have default FPS
+        assert 'render_fps' in config
+        assert config['render_fps'] == 30  # Our new default
     
     def test_create_env_config_missing_config_manager(self):
         """Test that factory requires ConfigManager."""
@@ -420,6 +451,51 @@ class TestInferenceEnvironment:
         """Test that inference environment requires ConfigManager."""
         with pytest.raises(TypeError):
             create_inference_environment(mode='batch')
+    
+    def test_create_inference_environment_fps_configuration(self):
+        """Test that different modes use appropriate FPS values."""
+        config_manager = create_test_config_manager()
+        
+        # Test agent mode should use higher FPS for smooth visualization
+        with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
+            with patch('src.factories.environment_factory.DummyVecEnv') as mock_dummy_vec:
+                mock_base_env = Mock()
+                mock_vec_env = Mock()
+                mock_create_base.return_value = mock_base_env
+                mock_dummy_vec.return_value = mock_vec_env
+                
+                env, raw_env = create_inference_environment(
+                    config_manager, 
+                    mode='agent'
+                )
+                
+                # Check that environment was created with FPS configuration
+                mock_create_base.assert_called_once()
+                call_args = mock_create_base.call_args[0][0]  # First positional argument (env_config)
+                assert 'render_fps' in call_args
+                assert call_args['render_fps'] >= 10  # Should be reasonably high for agent mode
+    
+    def test_create_inference_environment_human_mode_fps(self):
+        """Test that human mode uses appropriate FPS for responsive interaction."""
+        config_manager = create_test_config_manager()
+        
+        with patch('src.factories.environment_factory.create_base_environment') as mock_create_base:
+            with patch('src.factories.environment_factory.DummyVecEnv') as mock_dummy_vec:
+                mock_base_env = Mock()
+                mock_vec_env = Mock()
+                mock_create_base.return_value = mock_base_env
+                mock_dummy_vec.return_value = mock_vec_env
+                
+                env, raw_env = create_inference_environment(
+                    config_manager, 
+                    mode='human'
+                )
+                
+                # Check that environment was created with FPS configuration
+                mock_create_base.assert_called_once()
+                call_args = mock_create_base.call_args[0][0]  # First positional argument (env_config)
+                assert 'render_fps' in call_args
+                assert call_args['render_fps'] >= 30  # Should be high for responsive human interaction
 
 
 class TestSeedHandling:
@@ -562,3 +638,66 @@ class TestIntegrationScenarios:
                 
                 assert env == mock_vec_env
                 assert raw_env == mock_base_env
+
+
+class TestEnvironmentDelayFeatures:
+    """Test new delay and FPS features in the environment."""
+    
+    def test_environment_fps_configuration(self):
+        """Test that environment accepts FPS configuration."""
+        config_manager = create_test_config_manager()
+        env_config = create_env_config(config_manager=config_manager, render_fps=60)
+        
+        with patch('src.factories.environment_factory.MinesweeperEnv') as MockEnv:
+            mock_env_instance = Mock()
+            MockEnv.return_value = mock_env_instance
+            
+            env = create_base_environment(env_config)
+            
+            # Check that MinesweeperEnv was called with render_fps parameter
+            MockEnv.assert_called_once()
+            call_kwargs = MockEnv.call_args[1]  # keyword arguments
+            assert 'render_fps' in call_kwargs
+            assert call_kwargs['render_fps'] == 60
+    
+    def test_environment_delay_methods_interface(self):
+        """Test that environment has the expected delay methods."""
+        config_manager = create_test_config_manager()
+        env_config = create_env_config(config_manager=config_manager, render_fps=30)
+        
+        with patch('src.factories.environment_factory.MinesweeperEnv') as MockEnv:
+            mock_env_instance = Mock()
+            # Mock the delay methods
+            mock_env_instance.wait_frames = Mock()
+            mock_env_instance.wait_seconds = Mock()
+            mock_env_instance.is_waiting = Mock(return_value=False)
+            MockEnv.return_value = mock_env_instance
+            
+            env = create_base_environment(env_config)
+            
+            # Verify the delay methods exist and can be called
+            assert hasattr(env, 'wait_frames')
+            assert hasattr(env, 'wait_seconds') 
+            assert hasattr(env, 'is_waiting')
+            
+            # Test calling the methods
+            env.wait_frames(30)
+            env.wait_seconds(1.0)
+            is_waiting = env.is_waiting()
+            
+            # Verify calls were made
+            mock_env_instance.wait_frames.assert_called_once_with(30)
+            mock_env_instance.wait_seconds.assert_called_once_with(1.0)
+            mock_env_instance.is_waiting.assert_called_once()
+    
+    def test_fps_mode_specific_values(self):
+        """Test that different modes get appropriate FPS values."""
+        config_manager = create_test_config_manager()
+        
+        # Human mode should get high FPS for responsiveness
+        human_config = create_env_config(config_manager=config_manager, render_mode='human')
+        assert 'render_fps' in human_config
+        
+        # Batch mode (no render_mode) should still have FPS for consistency
+        batch_config = create_env_config(config_manager=config_manager)
+        assert 'render_fps' in batch_config
