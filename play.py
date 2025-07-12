@@ -261,9 +261,109 @@ def print_episode_result(episode, total_episodes, episode_steps, episode_reward,
           f"Steps: {episode_steps}, Reward: {episode_reward:.2f}, Result: {status}")
 
 
-def play_games(env, model, num_episodes, verbose=True):
+def run_interactive_game_loop(env, env_instance, action_provider, mode_name="Interactive"):
     """
-    Play multiple episodes and return statistics.
+    Universal interactive game loop for both human and agent modes.
+    
+    Args:
+        env: Vectorized environment instance  
+        env_instance: Raw environment instance for direct access
+        action_provider: Function that takes (obs, env_instance) and returns (action, should_quit)
+        mode_name: Name of the mode for logging
+        
+    Returns:
+        dict: Statistics including total_games, wins
+    """
+    # Game statistics
+    total_games = 0
+    player_wins = 0
+
+    try:
+        obs = env.reset()
+        env_instance.render()  # Render initial state
+        terminated = False
+        truncated = False
+        total_reward = 0
+        step_count = 0
+        current_game_won = False
+
+        running = True
+        while running:
+            # Get action from provider (human input, AI model, etc.)
+            action, should_quit = action_provider(obs, env_instance)
+            
+            if should_quit:
+                running = False
+                break
+                
+            # Execute action if provided
+            if action is not None:
+                obs, reward, terminated_arr, info_arr = env.step(action)
+                terminated = terminated_arr[0]
+                actual_info = info_arr[0]
+                current_game_won = actual_info.get('is_success', False)
+                truncated = actual_info.get('TimeLimit.truncated', False)
+                reward = reward[0]
+
+                total_reward += reward
+                step_count += 1
+                
+                print(f"Step: {step_count}, Action: {action[0] if isinstance(action, list) else action}, Reward: {reward:.2f}, Done: {terminated}")
+                
+                # Render after action
+                env_instance.render()
+
+                # Check game end
+                if terminated or truncated:
+                    total_games += 1
+                    if current_game_won:
+                        player_wins += 1
+                        print("Game Over - YOU WIN!")
+                    else:
+                        if terminated:
+                            print("Game Over - YOU LOSE!")
+                        else:
+                            print("Game Over!")
+
+                    print(f"Final Reward: {total_reward:.2f}, Steps: {step_count}")
+                    current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
+                    print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
+
+                    # Non-blocking pause to display results
+                    env_instance.wait_seconds(2)
+                    while env_instance.is_waiting():
+                        _, quit_check = action_provider(obs, env_instance, pause_mode=True)
+                        if quit_check:
+                            running = False
+                            break
+                        env_instance.render()
+                    
+                    if running:
+                        print("Resetting environment...")
+                        obs = env.reset()
+                        env_instance.render()  # Render after reset
+                        total_reward = 0
+                        step_count = 0
+                        terminated = False
+                        truncated = False
+                        current_game_won = False
+            else:
+                # No action, still render to keep display updated
+                env_instance.render()
+
+    except KeyboardInterrupt:
+        print(f"\n{mode_name} mode interrupted by user.")
+    finally:
+        print_final_statistics(total_games, player_wins, mode_name)
+        env.close()
+        print("Environment closed. Game exited.")
+        
+    return {'total_games': total_games, 'wins': player_wins}
+
+
+def run_batch_episodes(env, model, num_episodes, verbose=True):
+    """
+    Run multiple episodes in batch mode (no rendering, for evaluation).
     
     Args:
         env: Environment instance
@@ -380,8 +480,6 @@ def run_human_mode(config_manager, play_config, stats_path):
         play_config: Play configuration
         stats_path: Path to VecNormalize stats file
     """
-    print("--- Running Human Mode ---")
-
     # Create environment (with rendering)
     env, env_instance = create_inference_environment(
         config_manager=config_manager,
@@ -391,93 +489,21 @@ def run_human_mode(config_manager, play_config, stats_path):
     
     setup_random_seed(config_manager, env, play_config)
     
-    # Human mode doesn't need a model, but VecNormalize stats are handled in environment factory
-
-    # Game statistics
-    total_games = 0
-    player_wins = 0
-
-    try:
-        obs = env.reset()
-        terminated = False
-        truncated = False
-        total_reward = 0
-        step_count = 0
-        current_game_won = False
-
-        running = True
-        while running:
-            action = None
-
-            # Handle user input through environment
-            user_action, quit_flag = env_instance.get_user_action()
-            if quit_flag:
-                running = False
-                break
-            elif user_action is not None:
-                action = [user_action]
-
-            if not running:
-                break
-
-            # Execute action (if any)
-            if action is not None:
-                obs, reward, terminated_arr, info_arr = env.step(action)
-                terminated = terminated_arr[0]
-                actual_info = info_arr[0]
-                current_game_won = actual_info.get('is_success', False)
-                truncated = actual_info.get('TimeLimit.truncated', False)
-                reward = reward[0]
-
-                total_reward += reward
-                step_count += 1
-                
-                print(f"Step: {step_count}, Action: {action[0]}, Reward: {reward:.2f}, Done: {terminated}")
-
-                # Check game end
-                if terminated or truncated:
-                    total_games += 1
-                    if current_game_won:
-                        player_wins += 1
-                        print("Game Over - YOU WIN!")
-                    else:
-                        if terminated:
-                            print("Game Over - YOU LOSE!")
-                        else:
-                            print("Game Over!")
-
-                    print(f"Final Reward: {total_reward:.2f}, Steps: {step_count}")
-                    current_win_rate = (player_wins / total_games * 100) if total_games > 0 else 0
-                    print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
-
-                    # Non-blocking pause to display results
-                    env_instance.wait_seconds(2)
-                    # Keep rendering during the pause
-                    while env_instance.is_waiting():
-                        user_action, quit_flag = env_instance.get_user_action()
-                        if quit_flag:
-                            running = False
-                            break
-                        env_instance._render_frame()
-                    
-                    if running:
-                        print("Resetting environment...")
-                    obs = env.reset()
-                    total_reward = 0
-                    step_count = 0
-                    terminated = False
-                    truncated = False
-                    current_game_won = False
-            else:
-                # No action, still need to render to keep window updated
-                env_instance._render_frame()
-
-    except KeyboardInterrupt:
-        print("\nHuman mode interrupted by user.")
-    finally:
-        print_final_statistics(total_games, player_wins, "Human")
-        env.close()
-        print("Environment closed. Game exited.")
+    # Define inline action provider for human input
+    def get_human_action(obs, env_instance, pause_mode=False):
+        """Get action from human mouse clicks."""
+        if pause_mode:
+            # During pause, only check for quit
+            _, quit_flag = env_instance.get_user_action()
+            return None, quit_flag
+        
+        # Normal gameplay - get user action
+        user_action, quit_flag = env_instance.get_user_action()
+        action = [user_action] if user_action is not None else None
+        return action, quit_flag
+    
+    # Use universal interactive game loop
+    return run_interactive_game_loop(env, env_instance, get_human_action, "Human")
 
 
 def run_agent_mode(config_manager, play_config, model_path, stats_path):
@@ -490,8 +516,6 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
         model_path: Path to model file
         stats_path: Path to VecNormalize stats file
     """
-    print("--- Running Agent Mode ---")
-
     # Create environment (with rendering)
     env, env_instance = create_inference_environment(
         config_manager=config_manager,
@@ -506,97 +530,36 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
         return
     
     setup_random_seed(config_manager, env, play_config)
+    
+    # Define inline action provider for AI agent (closure has access to env and model)
+    def get_agent_action(obs, env_instance, pause_mode=False):
+        """Get action from AI agent with visualization delay."""
+        if pause_mode:
+            # During pause, only check for quit
+            return None, env_instance.check_quit_key()
+            
+        # Check for quit events first
+        if env_instance.check_quit_key():
+            print("Quitting agent mode...")
+            return None, True
 
-    # Game statistics
-    total_games = 0
-    agent_wins = 0
-
-    try:
-        obs = env.reset()
-        terminated = False
-        truncated = False
-        total_reward = 0
-        step_count = 0
-        current_game_won = False
-
-        running = True
-        while running:
-            # Check for quit events through environment
+        # Agent decision (env and model accessible via closure)
+        action_masks = env.env_method("action_masks")[0]
+        action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
+        
+        print(f"Agent action: {action}")
+        
+        # Non-blocking delay for human observation
+        env_instance.wait_seconds(play_config.delay)
+        while env_instance.is_waiting():
             if env_instance.check_quit_key():
-                print("Quitting agent mode...")
-                running = False
-
-            if not running:
-                break
-
-            # Agent decision
-            action_masks = env.env_method("action_masks")[0]
-            action, _states = model.predict(obs, action_masks=action_masks, deterministic=True)
-            
-            print(f"Agent action: {action}")
-            # Non-blocking delay for observation
-            env_instance.wait_seconds(play_config.delay)
-            while env_instance.is_waiting():
-                if env_instance.check_quit_key():
-                    running = False
-                    break
-                env_instance._render_frame()
-            
-            if not running:
-                break
-
-            # Execute action
-            obs, reward, terminated_arr, info_arr = env.step(action)
-            terminated = terminated_arr[0]
-            actual_info = info_arr[0]
-            current_game_won = actual_info.get('is_success', False)
-            truncated = actual_info.get('TimeLimit.truncated', False)
-            reward = reward[0]
-
-            total_reward += reward
-            step_count += 1
-            
-            print(f"Step: {step_count}, Action: {action[0]}, Reward: {reward:.2f}, Done: {terminated}")
-
-            # Check game end
-            if terminated or truncated:
-                total_games += 1
-                if current_game_won:
-                    agent_wins += 1
-                    print("Game Over - AGENT WINS!")
-                else:
-                    if terminated:
-                        print("Game Over - AGENT LOSES!")
-                    else:
-                        print("Game Over!")
-
-                print(f"Final Reward: {total_reward:.2f}, Steps: {step_count}")
-                current_win_rate = (agent_wins / total_games * 100) if total_games > 0 else 0
-                print(f"--- Stats so far --- Games: {total_games}, Wins: {agent_wins}, Win Rate: {current_win_rate:.2f}% ---")
-
-                # Non-blocking pause to display results
-                env_instance.wait_seconds(2)
-                while env_instance.is_waiting():
-                    if env_instance.check_quit_key():
-                        running = False
-                        break
-                    env_instance._render_frame()
-                
-                if running:
-                    print("Resetting environment...")
-                obs = env.reset()
-                total_reward = 0
-                step_count = 0
-                terminated = False
-                truncated = False
-                current_game_won = False
-
-    except KeyboardInterrupt:
-        print("\nAgent mode interrupted by user.")
-    finally:
-        print_final_statistics(total_games, agent_wins, "Agent")
-        env.close()
-        print("Environment closed. Game exited.")
+                return None, True
+            env_instance.render()
+        
+        return action, False
+    
+    # Use universal interactive game loop
+    return run_interactive_game_loop(env, env_instance, get_agent_action, "Agent")
 
 
 def print_play_configuration(play_config):

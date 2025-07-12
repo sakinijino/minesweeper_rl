@@ -103,9 +103,6 @@ class MinesweeperEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
 
-        if self.render_mode == "human":
-            self._render_frame()
-
         return observation, info
 
     def _calculate_neighbors(self):
@@ -196,9 +193,6 @@ class MinesweeperEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
 
-        if self.render_mode == "human":
-            self._render_frame()
-
         return observation, reward, terminated, truncated, info
 
     def _reveal_cell(self, row, col):
@@ -232,19 +226,19 @@ class MinesweeperEnv(gym.Env):
         return ~self.revealed.flatten()
 
     def render(self):
-        if self.render_mode == "rgb_array":
-            return self._render_frame()
-        # human 模式下，_render_frame 已经在 step 和 reset 中调用
-
-    def _get_pygame(self):
-        """Lazy load pygame module to avoid import warnings in headless environments."""
-        if self._pygame is None:
-            import pygame
-            self._pygame = pygame
-            pygame.init()
-        return self._pygame
-    
-    def _render_frame(self):
+        """
+        Render the environment.
+        
+        For 'human' mode: Displays the game window and handles frame timing.
+        For 'rgb_array' mode: Returns the game state as a numpy array.
+        For None mode: Does nothing.
+        
+        Returns:
+            numpy.ndarray: RGB array for 'rgb_array' mode, None otherwise.
+        """
+        if self.render_mode is None:
+            return None
+            
         pygame = self._get_pygame()  # Lazy load pygame
         
         if self.window is None and self.render_mode == "human":
@@ -297,8 +291,17 @@ class MinesweeperEnv(gym.Env):
                     self.is_paused = False
             
             self.clock.tick(self.render_fps)
+            return None
         else: # rgb_array
             return np.transpose(np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2))
+
+    def _get_pygame(self):
+        """Lazy load pygame module to avoid import warnings in headless environments."""
+        if self._pygame is None:
+            import pygame
+            self._pygame = pygame
+            pygame.init()
+        return self._pygame
 
     def get_user_action(self):
         """
