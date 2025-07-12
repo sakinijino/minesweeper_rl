@@ -1,26 +1,19 @@
-# play_new.py - Refactored play script with new configuration system
 import os
-import time
 import argparse
-
 from stable_baselines3.common.utils import set_random_seed
 
-# Legacy config import removed - now using new configuration system
+from src.config.config_manager import ConfigManager
+from src.config.config_schemas import PlayConfig
+
+from src.factories.model_factory import create_inference_model
+from src.factories.environment_factory import create_inference_environment
+
 from src.utils.checkpoint_utils import (
     find_best_checkpoint, 
     find_all_experiment_dirs,
     find_latest_experiment_dir,
     resolve_model_paths_from_run_dir
 )
-
-# Import model and environment factories
-from src.factories.model_factory import create_inference_model
-from src.factories.environment_factory import create_inference_environment
-
-# Import new configuration system
-from src.config.config_manager import ConfigManager
-from src.config.config_schemas import PlayConfig
-
 
 def setup_argument_parser():
     """
