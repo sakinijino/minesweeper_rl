@@ -261,7 +261,7 @@ def print_episode_result(episode, total_episodes, episode_steps, episode_reward,
           f"Steps: {episode_steps}, Reward: {episode_reward:.2f}, Result: {status}")
 
 
-def run_interactive_game_loop(env, env_instance, action_provider, mode_name="Interactive"):
+def run_interactive_game_loop(env, env_instance, action_provider, play_config, mode_name="Interactive"):
     """
     Universal interactive game loop for both human and agent modes.
     
@@ -269,6 +269,7 @@ def run_interactive_game_loop(env, env_instance, action_provider, mode_name="Int
         env: Vectorized environment instance  
         env_instance: Raw environment instance for direct access
         action_provider: Function that takes (obs, env_instance) and returns (action, should_quit)
+        play_config: Play configuration containing delay settings
         mode_name: Name of the mode for logging
         
     Returns:
@@ -330,7 +331,7 @@ def run_interactive_game_loop(env, env_instance, action_provider, mode_name="Int
                     print(f"--- Stats so far --- Games: {total_games}, Wins: {player_wins}, Win Rate: {current_win_rate:.2f}% ---")
 
                     # Non-blocking pause to display results
-                    env_instance.wait_seconds(2)
+                    env_instance.wait_seconds(play_config.delay)
                     while env_instance.is_waiting():
                         _, quit_check = action_provider(obs, env_instance, pause_mode=True)
                         if quit_check:
@@ -464,7 +465,7 @@ def run_batch_mode(config_manager, play_config, model_path, stats_path):
     setup_random_seed(config_manager, env, play_config)
 
     # Play games using the common function
-    stats = play_games(env, model, play_config.num_episodes, verbose=True)
+    stats = run_batch_episodes(env, model, play_config.num_episodes, verbose=True)
 
     # Print final statistics
     print_final_statistics(stats['total_games'], stats['wins'], "Agent")
@@ -503,7 +504,7 @@ def run_human_mode(config_manager, play_config, stats_path):
         return action, quit_flag
     
     # Use universal interactive game loop
-    return run_interactive_game_loop(env, env_instance, get_human_action, "Human")
+    return run_interactive_game_loop(env, env_instance, get_human_action, play_config, "Human")
 
 
 def run_agent_mode(config_manager, play_config, model_path, stats_path):
@@ -559,7 +560,7 @@ def run_agent_mode(config_manager, play_config, model_path, stats_path):
         return action, False
     
     # Use universal interactive game loop
-    return run_interactive_game_loop(env, env_instance, get_agent_action, "Agent")
+    return run_interactive_game_loop(env, env_instance, get_agent_action, play_config, "Agent")
 
 
 def print_play_configuration(play_config):
@@ -750,7 +751,7 @@ def run_compare_mode(args):
             
             # Play games
             print(f"Running {args.num_episodes} episodes...")
-            stats = play_games(env, model, args.num_episodes, verbose=False)
+            stats = run_batch_episodes(env, model, args.num_episodes, verbose=False)
             
             # Store results
             results.append({
