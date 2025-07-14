@@ -6,7 +6,7 @@ from src.config.config_manager import ConfigManager
 from src.config.config_schemas import PlayConfig
 
 from src.factories.model_factory import create_inference_model
-from src.factories.environment_factory import create_inference_environment、
+from src.factories.environment_factory import create_inference_environment
 
 from src.utils.checkpoint_utils import (
     find_best_checkpoint, 
