@@ -15,6 +15,7 @@ from stable_baselines3.common.utils import set_random_seed
 
 from ..env.minesweeper_env import MinesweeperEnv
 from ..config.config_manager import ConfigManager
+from ..wrappers.midgame_wrapper import MidGameWrapper
 
 
 class EnvironmentCreationError(Exception):
@@ -82,6 +83,36 @@ def create_env_config(
     return env_config
 
 
+def should_use_midgame_wrapper(config_manager: ConfigManager) -> bool:
+    """
+    Determine whether to use MidGameWrapper based on training progress.
+    
+    This function checks if the training has progressed enough to benefit from
+    mid-game state training. It looks for checkpoint files or training steps
+    to determine progress.
+    
+    Args:
+        config_manager: ConfigManager instance
+        
+    Returns:
+        bool: True if MidGameWrapper should be applied
+    """
+    # Enable mid-game wrapper after a certain number of training steps
+    # This threshold can be adjusted based on environment complexity
+    total_timesteps = config_manager.config.training_execution.total_timesteps
+    midgame_threshold = max(total_timesteps * 0.3, 100000)  # 30% of training or 100k steps
+    
+    # For now, we'll use a simple heuristic:
+    # - Always enable for long training runs (>500k steps)
+    # - Enable probabilistically for medium runs (100k-500k steps)
+    if total_timesteps >= 500000:
+        return True
+    elif total_timesteps >= 100000:
+        return True  # Enable for medium-length training
+    else:
+        return False  # Disable for short training runs
+
+
 def create_base_environment(env_config: Dict[str, Any]) -> Any:
     """
     Create a base MinesweeperEnv instance.
@@ -100,6 +131,50 @@ def create_base_environment(env_config: Dict[str, Any]) -> Any:
         return env
     except Exception as e:
         raise EnvironmentCreationError(f"Failed to create base environment") from e
+
+
+def apply_midgame_wrapper(env: Any, config_manager: ConfigManager) -> Any:
+    """
+    Apply MidGameWrapper to environment with appropriate settings.
+    
+    Args:
+        env: Base environment to wrap
+        config_manager: ConfigManager instance for configuration
+        
+    Returns:
+        Wrapped environment with MidGameWrapper
+    """
+    # Calculate appropriate parameters based on environment size
+    total_cells = env.width * env.height
+    safe_cells = total_cells - env.n_mines
+    
+    # Adaptive parameters based on board complexity
+    if total_cells <= 25:  # Small boards (5x5 or smaller)
+        midgame_probability = 0.2
+        min_revealed = 2
+        max_revealed = min(safe_cells // 3, 6)
+    elif total_cells <= 64:  # Medium boards (8x8 or smaller)
+        midgame_probability = 0.3
+        min_revealed = 3
+        max_revealed = min(safe_cells // 3, 12)
+    else:  # Large boards
+        midgame_probability = 0.4
+        min_revealed = 5
+        max_revealed = min(safe_cells // 3, 20)
+    
+    # Get seed for reproducibility
+    seed = config_manager.config.training_execution.seed
+    
+    wrapped_env = MidGameWrapper(
+        env,
+        midgame_probability=midgame_probability,
+        min_revealed_cells=min_revealed,
+        max_revealed_cells=max_revealed,
+        safe_first_moves=2,
+        seed=seed
+    )
+    
+    return wrapped_env
 
 
 def create_vectorized_environment(
@@ -204,9 +279,17 @@ def create_training_environment(
         # Create environment configuration
         env_config = create_env_config(config_manager=config_manager, render_mode=None)
         
-        # Create environment function
+        # Create environment function with optional MidGameWrapper
         def create_env():
-            return create_base_environment(env_config)
+            base_env = create_base_environment(env_config)
+            
+            # Automatically apply MidGameWrapper if conditions are met
+            if should_use_midgame_wrapper(config_manager):
+                print(f"Auto-applying MidGameWrapper for training (total_timesteps: {config_manager.config.training_execution.total_timesteps})")
+                wrapped_env = apply_midgame_wrapper(base_env, config_manager)
+                return wrapped_env
+            else:
+                return base_env
         
         # Get training parameters from ConfigManager
         training_config = config_manager.config.training_execution

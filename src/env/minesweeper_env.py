@@ -183,15 +183,16 @@ class MinesweeperEnv(gym.Env):
             # 计算基础奖励
             reward = revealed_count * self.reward_reveal
             
-            # 如果设置了单步最大奖励限制，则对奖励进行裁剪
-            if self.max_reward_per_step is not None:
-                reward = min(reward, self.max_reward_per_step)
-
+            # 检查胜利并添加胜利奖励
             if self._check_win():
                 reward += self.reward_win
                 self.game_over = True
                 terminated = True
                 self.win = True
+            
+            # 如果设置了单步最大奖励限制，则对总奖励进行裁剪
+            if self.max_reward_per_step is not None:
+                reward = min(reward, self.max_reward_per_step)
         
         # Cache last state (for proper display during delays)
         self.last_board = self.board.copy()
@@ -397,6 +398,55 @@ class MinesweeperEnv(gym.Env):
             bool: True if waiting, False otherwise
         """
         return self.is_paused
+    
+    def get_state(self):
+        """
+        Get the complete state of the environment.
+        
+        Returns:
+            dict: Dictionary containing all state information needed to restore the environment
+        """
+        return {
+            'board': self.board.copy(),
+            'mines': self.mines.copy(),
+            'revealed': self.revealed.copy(),
+            'game_over': self.game_over,
+            'win': self.win,
+            'first_step': self.first_step,
+            'neighbor_counts': self.neighbor_counts.copy(),
+            # Cache states for rendering
+            'last_board': self.last_board.copy() if self.last_board is not None else None,
+            'last_revealed': self.last_revealed.copy() if self.last_revealed is not None else None,
+            # Pause states
+            'pause_counter': self.pause_counter,
+            'is_paused': self.is_paused
+        }
+    
+    def set_state(self, state):
+        """
+        Set the environment to a specific state.
+        
+        Args:
+            state (dict): State dictionary returned by get_state()
+        """
+        self.board = state['board'].copy()
+        self.mines = state['mines'].copy()
+        self.revealed = state['revealed'].copy()
+        self.game_over = state['game_over']
+        self.win = state['win']
+        self.first_step = state['first_step']
+        self.neighbor_counts = state['neighbor_counts'].copy()
+        
+        # Restore cache states
+        self.last_board = state['last_board'].copy() if state['last_board'] is not None else None
+        self.last_revealed = state['last_revealed'].copy() if state['last_revealed'] is not None else None
+        
+        # Restore pause states
+        self.pause_counter = state.get('pause_counter', 0)
+        self.is_paused = state.get('is_paused', False)
+        
+        # Update mine locations for consistency
+        self.mine_locations = np.where(self.mines)
     
     def close(self):
         if self.window is not None and self._pygame is not None:
