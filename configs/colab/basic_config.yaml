@@ -2,8 +2,8 @@
 # 针对GPU资源和较长训练时间优化
 
 model_hyperparams:
-  learning_rate: 0.0001
-  ent_coef: 0.01
+  learning_rate: 0.0003
+  ent_coef: 0.03
   gamma: 0.99
   gae_lambda: 0.95
   clip_range: 0.2
@@ -27,7 +27,7 @@ environment_config:
   reward_invalid: -0.1
 
 training_execution:
-  total_timesteps: 1_000_000  # 更长的训练时间
+  total_timesteps: 500_000  # 更长的训练时间
   n_envs: 16  # 更多并行环境
   vec_env_type: "subproc"
   checkpoint_freq: 50000

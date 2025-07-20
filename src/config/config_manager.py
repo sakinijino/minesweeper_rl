@@ -23,6 +23,9 @@ from .config_schemas import (
     ModelHyperparams,
     NetworkArchitecture,
     EnvironmentConfig,
+    DynamicEnvironmentConfig,
+    BoardSizeConfig,
+    CurriculumConfig,
     TrainingExecutionConfig,
     PathsConfig,
     PlayConfig,
@@ -181,13 +184,13 @@ class ConfigManager:
         required_sections = {
             'model_hyperparams': ModelHyperparams,
             'network_architecture': NetworkArchitecture,
-            'environment_config': EnvironmentConfig,
             'training_execution': TrainingExecutionConfig,
             'paths_config': PathsConfig
         }
         
         missing_params = []
         
+        # Check basic required sections
         for section_name, section_class in required_sections.items():
             if section_name not in config_dict:
                 missing_params.append(f"Missing section: {section_name}")
@@ -195,9 +198,19 @@ class ConfigManager:
             
             section_dict = config_dict[section_name]
             for field in fields(section_class):
-                # Skip fields with default values (like max_reward_per_step)
+                # Skip fields with default values
                 if field.name not in section_dict and field.default == dataclasses.MISSING and field.default_factory == dataclasses.MISSING:
                     missing_params.append(f"Missing parameter: {section_name}.{field.name}")
+        
+        # Check environment configuration - can be either traditional or dynamic
+        if 'environment_config' not in config_dict and 'dynamic_environment_config' not in config_dict:
+            missing_params.append("Missing environment configuration: need either 'environment_config' or 'dynamic_environment_config'")
+        elif 'environment_config' in config_dict:
+            # Validate traditional environment config
+            env_dict = config_dict['environment_config']
+            for field in fields(EnvironmentConfig):
+                if field.name not in env_dict and field.default == dataclasses.MISSING and field.default_factory == dataclasses.MISSING:
+                    missing_params.append(f"Missing parameter: environment_config.{field.name}")
         
         if missing_params:
             raise ConfigurationError(f"Required parameters missing:\\n" + "\\n".join(missing_params))
@@ -331,6 +344,116 @@ class ConfigManager:
         manager.load_from_args(args)
         manager.build_config()
         return manager
+    
+    def is_dynamic_environment(self) -> bool:
+        """
+        Check if the current configuration uses dynamic environment settings.
+        
+        Returns:
+            bool: True if dynamic environment config is used
+        """
+        if self.config is None:
+            raise ConfigurationError("No configuration available. Call build_config() first.")
+        
+        return isinstance(self.config.environment_config, DynamicEnvironmentConfig)
+    
+    def get_environment_config(self) -> Union[EnvironmentConfig, DynamicEnvironmentConfig]:
+        """
+        Get the environment configuration (either traditional or dynamic).
+        
+        Returns:
+            Union[EnvironmentConfig, DynamicEnvironmentConfig]: Environment configuration
+        """
+        if self.config is None:
+            raise ConfigurationError("No configuration available. Call build_config() first.")
+        
+        return self.config.environment_config
+    
+    def get_current_board_size(self, timestep: int = 0) -> Optional[BoardSizeConfig]:
+        """
+        Get the current board size based on curriculum progress.
+        
+        Args:
+            timestep: Current training timestep
+            
+        Returns:
+            Optional[BoardSizeConfig]: Current board size configuration
+        """
+        if not self.is_dynamic_environment():
+            # Convert traditional config to board size config
+            env_config = self.config.environment_config
+            return BoardSizeConfig(
+                width=env_config.width,
+                height=env_config.height,
+                n_mines=env_config.n_mines
+            )
+        
+        dynamic_config = self.config.environment_config
+        
+        if dynamic_config.curriculum is not None and dynamic_config.curriculum.enabled:
+            # Calculate curriculum progression
+            curriculum = dynamic_config.curriculum
+            
+            # Determine current curriculum step
+            current_step = min(timestep // curriculum.step_duration, curriculum.progression_steps - 1)
+            progress = current_step / max(curriculum.progression_steps - 1, 1)
+            
+            # Linear interpolation between start and end sizes
+            start_size = curriculum.start_size
+            end_size = curriculum.end_size
+            
+            if curriculum.progression_type == "linear":
+                width = int(start_size.width + (end_size.width - start_size.width) * progress)
+                height = int(start_size.height + (end_size.height - start_size.height) * progress)
+                n_mines = int(start_size.n_mines + (end_size.n_mines - start_size.n_mines) * progress)
+            elif curriculum.progression_type == "exponential":
+                # Exponential progression (slower at first, faster later)
+                exp_progress = progress ** 2
+                width = int(start_size.width + (end_size.width - start_size.width) * exp_progress)
+                height = int(start_size.height + (end_size.height - start_size.height) * exp_progress)
+                n_mines = int(start_size.n_mines + (end_size.n_mines - start_size.n_mines) * exp_progress)
+            else:
+                # Default to linear
+                width = int(start_size.width + (end_size.width - start_size.width) * progress)
+                height = int(start_size.height + (end_size.height - start_size.height) * progress)
+                n_mines = int(start_size.n_mines + (end_size.n_mines - start_size.n_mines) * progress)
+            
+            return BoardSizeConfig(width=width, height=height, n_mines=n_mines)
+        
+        elif dynamic_config.board_sizes is not None:
+            # Random sampling or return first size
+            return dynamic_config.board_sizes[0]
+        
+        return None
+    
+    def get_reward_config(self) -> Dict[str, float]:
+        """
+        Get reward configuration for environment creation.
+        
+        Returns:
+            Dict[str, float]: Reward configuration dictionary
+        """
+        if self.config is None:
+            raise ConfigurationError("No configuration available. Call build_config() first.")
+        
+        if isinstance(self.config.environment_config, DynamicEnvironmentConfig):
+            dynamic_config = self.config.environment_config
+            return {
+                'reward_win': dynamic_config.reward_win,
+                'reward_lose': dynamic_config.reward_lose,
+                'reward_reveal': dynamic_config.reward_reveal,
+                'reward_invalid': dynamic_config.reward_invalid,
+                'max_reward_per_step': dynamic_config.max_reward_per_step
+            }
+        else:
+            env_config = self.config.environment_config
+            return {
+                'reward_win': env_config.reward_win,
+                'reward_lose': env_config.reward_lose,
+                'reward_reveal': env_config.reward_reveal,
+                'reward_invalid': env_config.reward_invalid,
+                'max_reward_per_step': env_config.max_reward_per_step
+            }
     
     def __str__(self) -> str:
         """String representation of the configuration."""

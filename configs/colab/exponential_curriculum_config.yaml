@@ -1,0 +1,54 @@
+# Exponential Curriculum Learning Configuration
+# This configuration demonstrates exponential curriculum learning progression
+
+model_hyperparams:
+  learning_rate: 0.0003
+  ent_coef: 0.03
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 2048
+  batch_size: 512
+  n_epochs: 10
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [256, 128]
+  vf_layers: [256, 128]
+
+# Dynamic environment configuration with exponential curriculum learning
+dynamic_environment_config:
+  curriculum:
+    enabled: true
+    progression_type: "exponential"  # Slower progression at first, faster later
+    start_size:
+      width: 4
+      height: 4
+      n_mines: 2
+    end_size:
+      width: 10
+      height: 10
+      n_mines: 10
+    progression_steps: 15
+    step_duration: 40000  # Longer duration per step
+    success_threshold: 0.7  # Higher threshold for advancement
+    evaluation_episodes: 100  # More episodes for evaluation
+
+  # Shared reward configuration
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 1_000_000  # 1M timesteps for challenging curriculum
+  n_envs: 16  # More parallel environments
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 123
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_exp_curric_ppo"

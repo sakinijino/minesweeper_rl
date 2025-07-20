@@ -1,0 +1,54 @@
+# Curriculum Learning Configuration
+# This configuration demonstrates curriculum learning from small to large boards
+
+model_hyperparams:
+  learning_rate: 0.0003
+  ent_coef: 0.03
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 256
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 64
+  pi_layers: [128, 64]
+  vf_layers: [128, 64]
+
+# Dynamic environment configuration with curriculum learning
+dynamic_environment_config:
+  curriculum:
+    enabled: true
+    progression_type: "linear"  # "linear", "exponential", "manual"
+    start_size:
+      width: 5
+      height: 5
+      n_mines: 3
+    end_size:
+      width: 10
+      height: 10
+      n_mines: 10
+    progression_steps: 20
+    step_duration: 25000  # timesteps per curriculum step
+    success_threshold: 0.6  # win rate threshold to advance
+    evaluation_episodes: 50  # episodes to evaluate success rate
+  
+  # Shared reward configuration
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 500_000  # 500k timesteps for curriculum learning
+  n_envs: 16  # More parallel environments for curriculum learning
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_curric_ppo"

@@ -15,6 +15,8 @@ from stable_baselines3.common.utils import set_random_seed
 
 from ..env.minesweeper_env import MinesweeperEnv
 from ..config.config_manager import ConfigManager
+from ..config.config_schemas import DynamicEnvironmentConfig, EnvironmentConfig
+from ..wrappers.curriculum_wrapper import CurriculumLearningWrapper, DynamicEnvironmentWrapper
 
 
 class EnvironmentCreationError(Exception):
@@ -28,7 +30,8 @@ class EnvironmentCreationError(Exception):
 def create_env_config(
     config_manager: ConfigManager,
     render_mode: Optional[str] = None,
-    render_fps: Optional[int] = None
+    render_fps: Optional[int] = None,
+    board_size_override: Optional[Dict[str, int]] = None
 ) -> Dict[str, Any]:
     """
     Create environment configuration dictionary from ConfigManager.
@@ -37,6 +40,7 @@ def create_env_config(
         config_manager: ConfigManager instance containing all configuration
         render_mode: Rendering mode ('human', 'rgb_array', None)
         render_fps: Frame rate for rendering (defaults to mode-appropriate value)
+        board_size_override: Optional override for board size (width, height, n_mines)
         
     Returns:
         Dictionary containing environment configuration
@@ -49,14 +53,6 @@ def create_env_config(
     
     env_config_obj = config_manager.config.environment_config
     
-    # Validate that ConfigManager has all required values (max_reward_per_step is optional)
-    required_values = ['width', 'height', 'n_mines', 'reward_win', 'reward_lose', 
-                      'reward_reveal', 'reward_invalid']
-    for attr in required_values:
-        if getattr(env_config_obj, attr) is None:
-            raise ValueError(f"ConfigManager.environment_config.{attr} is None. "
-                           f"ConfigManager must provide all default values.")
-    
     # Determine appropriate FPS based on mode if not specified
     if render_fps is None:
         if render_mode == 'human':
@@ -66,17 +62,46 @@ def create_env_config(
         else:
             render_fps = 30  # Default FPS for other cases
     
+    # Get reward configuration
+    reward_config = config_manager.get_reward_config()
+    
+    # Handle board size
+    if board_size_override:
+        # Use override values
+        width = board_size_override['width']
+        height = board_size_override['height']
+        n_mines = board_size_override['n_mines']
+    elif isinstance(env_config_obj, DynamicEnvironmentConfig):
+        # For dynamic config, use the first available board size or fixed config
+        if env_config_obj.fixed_config:
+            width = env_config_obj.fixed_config.width
+            height = env_config_obj.fixed_config.height
+            n_mines = env_config_obj.fixed_config.n_mines
+        elif env_config_obj.board_sizes:
+            board_size = env_config_obj.board_sizes[0]
+            width = board_size.width
+            height = board_size.height
+            n_mines = board_size.n_mines
+        elif env_config_obj.curriculum and env_config_obj.curriculum.enabled:
+            board_size = env_config_obj.curriculum.start_size
+            width = board_size.width
+            height = board_size.height
+            n_mines = board_size.n_mines
+        else:
+            raise ValueError("DynamicEnvironmentConfig must have at least one board size configuration")
+    else:
+        # Traditional environment config
+        width = env_config_obj.width
+        height = env_config_obj.height
+        n_mines = env_config_obj.n_mines
+    
     env_config = {
-        'width': env_config_obj.width,
-        'height': env_config_obj.height,
-        'n_mines': env_config_obj.n_mines,
-        'reward_win': env_config_obj.reward_win,
-        'reward_lose': env_config_obj.reward_lose,
-        'reward_reveal': env_config_obj.reward_reveal,
-        'reward_invalid': env_config_obj.reward_invalid,
-        'max_reward_per_step': env_config_obj.max_reward_per_step,
+        'width': width,
+        'height': height,
+        'n_mines': n_mines,
         'render_mode': render_mode,
-        'render_fps': render_fps
+        'render_fps': render_fps,
+        **reward_config
     }
     
     return env_config
@@ -100,6 +125,112 @@ def create_base_environment(env_config: Dict[str, Any]) -> Any:
         return env
     except Exception as e:
         raise EnvironmentCreationError(f"Failed to create base environment") from e
+
+
+def create_dynamic_environment(config_manager: ConfigManager, seed: Optional[int] = None) -> Any:
+    """
+    Create an environment with dynamic board size support.
+    
+    This function creates the appropriate environment based on the configuration:
+    - Traditional fixed-size environment for EnvironmentConfig
+    - Curriculum learning environment for DynamicEnvironmentConfig with curriculum
+    - Multi-size sampling environment for DynamicEnvironmentConfig with board_sizes
+    
+    Args:
+        config_manager: ConfigManager instance containing all configuration
+        seed: Random seed for reproducibility
+        
+    Returns:
+        Environment instance (potentially wrapped for dynamic behavior)
+        
+    Raises:
+        EnvironmentCreationError: If environment creation fails
+    """
+    try:
+        env_config_obj = config_manager.config.environment_config
+        
+        if isinstance(env_config_obj, DynamicEnvironmentConfig):
+            # Handle dynamic environment configuration
+            if env_config_obj.curriculum is not None and env_config_obj.curriculum.enabled:
+                # Create curriculum learning environment
+                print(f"Creating curriculum learning environment: {env_config_obj.curriculum.start_size.width}x{env_config_obj.curriculum.start_size.height} -> {env_config_obj.curriculum.end_size.width}x{env_config_obj.curriculum.end_size.height}")
+                
+                # Create initial base environment with start size
+                initial_env_config = create_env_config(
+                    config_manager=config_manager,
+                    render_mode=None,
+                    board_size_override={
+                        'width': env_config_obj.curriculum.start_size.width,
+                        'height': env_config_obj.curriculum.start_size.height,
+                        'n_mines': env_config_obj.curriculum.start_size.n_mines
+                    }
+                )
+                
+                base_env = create_base_environment(initial_env_config)
+                reward_config = config_manager.get_reward_config()
+                
+                # Wrap with curriculum learning
+                wrapped_env = CurriculumLearningWrapper(
+                    env=base_env,
+                    curriculum_config=env_config_obj.curriculum,
+                    reward_config=reward_config,
+                    seed=seed
+                )
+                
+                return wrapped_env
+                
+            elif env_config_obj.board_sizes is not None:
+                # Create multi-size sampling environment
+                print(f"Creating dynamic multi-size environment with {len(env_config_obj.board_sizes)} board sizes")
+                
+                # Create initial base environment with first board size
+                initial_board_size = env_config_obj.board_sizes[0]
+                initial_env_config = create_env_config(
+                    config_manager=config_manager,
+                    render_mode=None,
+                    board_size_override={
+                        'width': initial_board_size.width,
+                        'height': initial_board_size.height,
+                        'n_mines': initial_board_size.n_mines
+                    }
+                )
+                
+                base_env = create_base_environment(initial_env_config)
+                reward_config = config_manager.get_reward_config()
+                
+                # Wrap with dynamic environment wrapper
+                wrapped_env = DynamicEnvironmentWrapper(
+                    env=base_env,
+                    board_sizes=env_config_obj.board_sizes,
+                    reward_config=reward_config,
+                    sampling_weights=env_config_obj.sampling_weights,
+                    seed=seed
+                )
+                
+                return wrapped_env
+                
+            elif env_config_obj.fixed_config is not None:
+                # Use fixed configuration from dynamic config
+                print(f"Creating fixed-size environment from dynamic config: {env_config_obj.fixed_config.width}x{env_config_obj.fixed_config.height}")
+                
+                env_config = create_env_config(config_manager=config_manager, render_mode=None)
+                return create_base_environment(env_config)
+                
+            else:
+                raise ValueError("DynamicEnvironmentConfig must have at least one configuration type")
+                
+        else:
+            # Traditional fixed-size environment
+            print(f"Creating traditional fixed-size environment: {env_config_obj.width}x{env_config_obj.height}")
+            
+            env_config = create_env_config(config_manager=config_manager, render_mode=None)
+            return create_base_environment(env_config)
+            
+    except Exception as e:
+        if isinstance(e, (EnvironmentCreationError, ValueError)):
+            raise
+        else:
+            raise EnvironmentCreationError(f"Failed to create dynamic environment") from e
 
 
 def create_vectorized_environment(
@@ -184,7 +315,7 @@ def create_training_environment(
     vecnormalize_stats_path: Optional[str] = None
 ) -> Any:
     """
-    Create a training environment with VecNormalize.
+    Create a training environment with VecNormalize and dynamic board size support.
     
     Args:
         config_manager: ConfigManager instance containing all configuration
@@ -201,19 +332,16 @@ def create_training_environment(
         if config_manager is None:
             raise ValueError("config_manager is required")
         
-        # Create environment configuration
-        env_config = create_env_config(config_manager=config_manager, render_mode=None)
-        
-        # Create environment function
-        def create_env():
-            return create_base_environment(env_config)
-        
         # Get training parameters from ConfigManager
         training_config = config_manager.config.training_execution
         n_envs = training_config.n_envs
         vec_env_type = training_config.vec_env_type
         seed = training_config.seed
         gamma = config_manager.config.model_hyperparams.gamma
+        
+        # Create environment function with dynamic board size support
+        def create_env():
+            return create_dynamic_environment(config_manager, seed=seed)
         
         # Create vectorized environment
         vec_env = create_vectorized_environment(

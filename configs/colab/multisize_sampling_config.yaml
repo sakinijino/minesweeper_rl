@@ -1,0 +1,60 @@
+# Multi-Size Sampling Configuration
+# This configuration demonstrates random sampling from multiple board sizes
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 256
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 64
+  pi_layers: [128, 64]
+  vf_layers: [128, 64]
+
+# Dynamic environment configuration with multiple board sizes
+dynamic_environment_config:
+  # Multiple board sizes for random sampling
+  board_sizes:
+    - width: 5
+      height: 5
+      n_mines: 3
+    - width: 6
+      height: 6
+      n_mines: 4
+    - width: 7
+      height: 7
+      n_mines: 5
+    - width: 8
+      height: 8
+      n_mines: 6
+    - width: 10
+      height: 10
+      n_mines: 10
+  
+  # Random sampling configuration
+  random_sampling: true
+  sampling_weights: [0.3, 0.25, 0.2, 0.15, 0.1]  # Higher probability for smaller boards
+  
+  # Shared reward configuration
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 500_000  # 500ktimesteps for multi-size sampling
+  n_envs: 16 
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_multisize_ppo"

@@ -27,8 +27,9 @@ pip install -r requirements.txt
 # Quick start with local configuration (for testing)
 python train.py --config configs/local_config.yaml
 
-# Quick start with Colab configuration (for long training)
-python train.py --config configs/colab_config.yaml
+# Training with dynamic board size support
+python train.py --config configs/colab/curriculum_learning_config.yaml    # Curriculum learning
+python train.py --config configs/colab/multisize_sampling_config.yaml     # Multi-size sampling
 
 # Override specific parameters
 python train.py --config configs/local_config.yaml \
@@ -36,7 +37,7 @@ python train.py --config configs/local_config.yaml \
   --learning_rate 0.0005
 
 # Advanced training with custom parameters (showcasing available options)
-python train.py --config configs/colab_config.yaml \
+python train.py --config configs/colab/basic_config.yaml \
   --total_timesteps 2_000_000 \
   --n_envs 8 \
   --learning_rate 0.0003 \
@@ -112,7 +113,8 @@ tensorboard --logdir ./training_runs/
 
 - **Custom Gymnasium Environment**: Full Minesweeper game logic with action masking
 - **MaskablePPO**: Prevents invalid moves (clicking revealed cells)
-- **Custom CNN**: Optimized for grid-based input processing
+- **Adaptive CNN**: Handles variable board sizes with adaptive pooling
+- **Dynamic Board Size Support**: Curriculum learning and multi-size training
 - **Advanced Configuration System**: YAML/JSON-based config with parameter priority system
 - **Multiple Play Modes**: AI demonstration, batch evaluation, human play, model comparison
 - **TensorBoard Integration**: Monitor training progress
@@ -159,8 +161,9 @@ The new configuration system uses YAML/JSON files with a parameter priority syst
 
 ```bash
 # Use predefined configurations
-python train.py --config configs/local_config.yaml    # For local testing
-python train.py --config configs/colab_config.yaml    # For Colab training
+python train.py --config configs/local_config.yaml                        # For local testing
+python train.py --config configs/colab/basic_config.yaml                  # For basic Colab training
+python train.py --config configs/colab/curriculum_learning_config.yaml     # For curriculum learning in Colab
 
 # Override specific parameters (command-line has highest priority)
 python train.py --config configs/local_config.yaml --learning_rate 0.0005
@@ -171,7 +174,12 @@ python train.py --continue_from ./training_runs/your_run/ --config configs/local
 
 **Configuration files support YAML and JSON formats:**
 - `configs/local_config.yaml` - Optimized for local testing (small env, fast training)
-- `configs/colab_config.yaml` - Optimized for Colab training (GPU, longer training)
+- `configs/colab/` - Configurations optimized for Google Colab:
+  - `basic_config.yaml` - Basic fixed-size training configuration
+  - `curriculum_learning_config.yaml` - Progressive training from small to large boards
+  - `exponential_curriculum_config.yaml` - Exponential curriculum progression
+  - `multisize_sampling_config.yaml` - Random sampling from multiple board sizes
+- `configs/hybrid_dynamic_config.yaml` - Hybrid configuration with optional curriculum
 
 **Configuration includes:**
 - Model hyperparameters (learning rate, batch size, etc.)
@@ -186,22 +194,31 @@ python train.py --continue_from ./training_runs/your_run/ --config configs/local
 minesweeper_rl/
 ├── configs/               # Configuration files
 │   ├── local_config.yaml      # Local testing configuration
-│   └── colab_config.yaml      # Colab training configuration
+│   ├── hybrid_dynamic_config.yaml  # Hybrid configuration example
+│   ├── colab/             # Google Colab configurations
+│   │   ├── basic_config.yaml           # Basic fixed-size training
+│   │   ├── curriculum_learning_config.yaml  # Curriculum learning
+│   │   ├── exponential_curriculum_config.yaml  # Exponential curriculum
+│   │   └── multisize_sampling_config.yaml     # Multi-size sampling
+│   └── README.md          # Configuration documentation
 ├── src/
 │   ├── env/               # Environment and CNN implementations
 │   │   ├── minesweeper_env.py  # Custom Gymnasium environment
-│   │   └── custom_cnn.py       # CNN feature extractor
+│   │   └── custom_cnn.py       # Adaptive CNN feature extractor
 │   ├── config/            # Configuration system
 │   │   ├── config_manager.py   # Configuration management
 │   │   └── config_schemas.py   # Configuration data schemas
 │   ├── factories/         # Model and environment factories
 │   │   ├── environment_factory.py  # Environment creation
 │   │   └── model_factory.py        # Model creation
-│   └── utils/             # Utilities and legacy config
-│       ├── checkpoint_utils.py     # Checkpoint management
+│   ├── wrappers/          # Environment wrappers
+│   │   └── curriculum_wrapper.py   # Curriculum learning wrapper
+│   └── utils/             # Utilities
+│       └── checkpoint_utils.py     # Checkpoint management
 ├── tests/                 # Unit tests
-├── train.py              # Training script (new config system)
-├── play.py               # Playing/evaluation script (new config system)
+├── train.py              # Training script
+├── play.py               # Playing/evaluation script
+├── playground.ipynb      # Google Colab notebook
 ├── requirements.txt      # Python dependencies
 └── README.md            # This file
 ```

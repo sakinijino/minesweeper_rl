@@ -1,0 +1,67 @@
+# Hybrid Dynamic Configuration
+# This configuration demonstrates using dynamic config with fixed size as fallback
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 256
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 64
+  pi_layers: [128, 64]
+  vf_layers: [128, 64]
+
+# Dynamic environment configuration with fallback to fixed config
+dynamic_environment_config:
+  # Fixed configuration as fallback
+  fixed_config:
+    width: 7
+    height: 7
+    n_mines: 8
+    reward_win: 1.0
+    reward_lose: -0.1
+    reward_reveal: 0.02
+    reward_invalid: -0.05
+    max_reward_per_step: 0.5
+  
+  # Optional curriculum (disabled by default)
+  curriculum:
+    enabled: false
+    progression_type: "linear"
+    start_size:
+      width: 5
+      height: 5
+      n_mines: 3
+    end_size:
+      width: 10
+      height: 10
+      n_mines: 10
+    progression_steps: 10
+    step_duration: 30000
+    success_threshold: 0.6
+    evaluation_episodes: 50
+  
+  # Shared reward configuration (overrides fixed_config rewards)
+  reward_win: 1.0
+  reward_lose: -0.1
+  reward_reveal: 0.02
+  reward_invalid: -0.05
+  max_reward_per_step: 0.5
+
+training_execution:
+  total_timesteps: 200000
+  n_envs: 8
+  vec_env_type: "subproc"
+  checkpoint_freq: 10000
+  device: "auto"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_hybrid_ppo"

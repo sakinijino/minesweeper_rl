@@ -4,6 +4,10 @@ Model Factory Module
 This module provides factory functions for creating and loading MaskablePPO models
 with consistent configuration. It centralizes the model creation logic to eliminate
 code duplication between train.py and play.py.
+
+The models created by this factory are compatible with dynamic board sizes through
+the adaptive CustomCNN architecture, which uses adaptive pooling to handle variable
+input dimensions.
 """
 
 import os
@@ -27,7 +31,10 @@ def create_policy_kwargs(
     config_manager: ConfigManager
 ) -> Dict[str, Any]:
     """
-    Create policy kwargs for MaskablePPO model.
+    Create policy kwargs for MaskablePPO model with dynamic board size support.
+    
+    The CustomCNN feature extractor uses adaptive pooling to handle variable input
+    dimensions, making it compatible with curriculum learning and multi-size environments.
     
     Args:
         config_manager: ConfigManager instance containing all configuration

@@ -13,6 +13,42 @@ from src.utils.checkpoint_utils import (
     resolve_continue_training_paths
 )
 
+from src.config.config_schemas import DynamicEnvironmentConfig
+
+
+def _get_environment_description(config_manager):
+    """
+    Get a description of the environment configuration for directory naming.
+    
+    Args:
+        config_manager: ConfigManager instance
+        
+    Returns:
+        str: Environment description for directory naming
+    """
+    env_config = config_manager.config.environment_config
+    
+    if isinstance(env_config, DynamicEnvironmentConfig):
+        # Handle dynamic environment configurations
+        if env_config.curriculum is not None and env_config.curriculum.enabled:
+            # Curriculum learning
+            start_size = env_config.curriculum.start_size
+            end_size = env_config.curriculum.end_size
+            return f"curriculum_{start_size.width}x{start_size.height}x{start_size.n_mines}_to_{end_size.width}x{end_size.height}x{end_size.n_mines}"
+        elif env_config.board_sizes is not None:
+            # Multi-size sampling
+            sizes_str = "_".join([f"{size.width}x{size.height}x{size.n_mines}" for size in env_config.board_sizes])
+            return f"multisize_{sizes_str}"
+        elif env_config.fixed_config is not None:
+            # Fixed config within dynamic config
+            fixed = env_config.fixed_config
+            return f"{fixed.width}x{fixed.height}x{fixed.n_mines}"
+        else:
+            return "dynamic_unknown"
+    else:
+        # Traditional environment configuration
+        return f"{env_config.width}x{env_config.height}x{env_config.n_mines}"
+
 
 def setup_argument_parser():
     """
@@ -232,7 +268,7 @@ def create_training_directories(config_manager, continue_training, original_run_
         # Normal training - create new directory
         run_name_parts = [
             config.paths_config.model_prefix,
-            f"{config.environment_config.width}x{config.environment_config.height}x{config.environment_config.n_mines}",
+            _get_environment_description(config_manager),
         ]
 
         if config.training_execution.seed is not None:
@@ -402,6 +438,46 @@ def run_training_loop(model, config_manager, checkpoint_callback, continue_train
         print("Environment closed.")
 
 
+def report_curriculum_progress(train_env, config_manager, model):
+    """
+    Report curriculum learning progress if applicable.
+    
+    Args:
+        train_env: Training environment (potentially wrapped)
+        config_manager: Configuration manager instance
+        model: Training model
+    """
+    if not config_manager.is_dynamic_environment():
+        return
+    
+    # Check if the environment has curriculum information
+    if hasattr(train_env, 'env_fns') and train_env.env_fns:
+        # For vectorized environments, check the first environment
+        first_env = train_env.env_fns[0]()
+        if hasattr(first_env, 'get_curriculum_info'):
+            curriculum_info = first_env.get_curriculum_info()
+            print("\n--- Curriculum Learning Progress ---")
+            print(f"Current board size: {curriculum_info.get('current_board_size', 'N/A')}")
+            print(f"Current mines: {curriculum_info.get('current_mines', 'N/A')}")
+            print(f"Episodes completed: {curriculum_info.get('episodes_completed', 'N/A')}")
+            print(f"Recent win rate: {curriculum_info.get('recent_win_rate', 0.0):.3f}")
+            print(f"Curriculum progress: {curriculum_info.get('curriculum_progress', 0.0):.3f}")
+            print("-----------------------------------\n")
+    
+    elif hasattr(train_env, 'venv') and hasattr(train_env.venv, 'envs'):
+        # For VecNormalize wrapped environments
+        first_env = train_env.venv.envs[0]
+        if hasattr(first_env, 'get_curriculum_info'):
+            curriculum_info = first_env.get_curriculum_info()
+            print("\n--- Curriculum Learning Progress ---")
+            print(f"Current board size: {curriculum_info.get('current_board_size', 'N/A')}")
+            print(f"Current mines: {curriculum_info.get('current_mines', 'N/A')}")
+            print(f"Episodes completed: {curriculum_info.get('episodes_completed', 'N/A')}")
+            print(f"Recent win rate: {curriculum_info.get('recent_win_rate', 0.0):.3f}")
+            print(f"Curriculum progress: {curriculum_info.get('curriculum_progress', 0.0):.3f}")
+            print("-----------------------------------\n")
+
+
 def print_training_configuration(config_manager):
     """Print training configuration information."""
     print("--- Training Configuration ---")
@@ -453,6 +529,9 @@ def main():
         model, config_manager, checkpoint_callback, continue_training, 
         final_model_path, stats_path, train_env
     )
+    
+    # 10. Report curriculum progress if applicable
+    report_curriculum_progress(train_env, config_manager, model)
 
 
 if __name__ == '__main__':
