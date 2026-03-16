@@ -31,7 +31,7 @@ MODAL  = $(if $(wildcard .venv/bin/modal),.venv/bin/modal,modal)
 
 ## train: Launch Modal training with CONFIG (default: configs/modal_quick_config.yaml)
 train:
-	$(MODAL) run train_modal.py --config $(CONFIG)
+	$(MODAL) run --detach train_modal.py --config $(CONFIG)
 
 ## pull: Pull RUN (or latest) from Modal Volume to training_runs/
 pull:
