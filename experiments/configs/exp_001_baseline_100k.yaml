@@ -1,0 +1,40 @@
+# EXP-001 基线验证配置
+# 目标：快速验证训练流程和效果趋势（几分钟内跑完）
+# 对应 Modal 快速验证配置（原 configs/modal_quick_config.yaml）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 100_000
+  n_envs: 8
+  vec_env_type: "subproc"
+  checkpoint_freq: 25000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

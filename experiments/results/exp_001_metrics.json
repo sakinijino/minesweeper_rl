@@ -1,0 +1,10 @@
+{
+  "exp_id": "exp_001",
+  "run_name": "mw_ppo_5x5x3_seed42_20260316104017",
+  "total_steps": 106496,
+  "final_success_rate": 0.11,
+  "max_success_rate": 0.21,
+  "final_explained_variance": 0.74,
+  "final_entropy_loss": -1.69,
+  "notes": "100k steps baseline. Success rate fluctuates 7-21%, no convergence. Training underfit."
+}

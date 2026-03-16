@@ -46,41 +46,41 @@ python train.py --config configs/colab_config.yaml \
   --seed 42
 ```
 
+### Experiment Workflow (Modal Cloud Training)
+
+```bash
+make train CONFIG=experiments/configs/exp_NNN_xxx.yaml   # launch cloud training
+make pull [RUN=run_name]                                 # download results
+make analyze [RUN=run_name] [EXP_ID=exp_NNN]            # diagnose training curves
+make eval [RUN=run_name]                                 # clean win rate (100 episodes)
+make play [RUN=run_name]                                 # watch agent (optional)
+make compare                                             # cross-run comparison (optional)
+make tensorboard                                         # view curves in browser
+make list                                                # list runs in Modal Volume
+make test                                                # run unit tests
+```
+
+After `make eval`, record the win rate manually in `experiments/log.md`.
+
 ### Playing
 
 ```bash
-# Watch AI play with specific model directory
-python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/
+# Batch evaluation — clean win rate (no visualization)
+make eval RUN=mw_ppo_5x5x3_seed42_xxx
 
-# Watch AI play with latest experiment from training_runs/
-python play.py --mode agent --training_run_dir ./training_runs/
+# Watch AI play with visualization
+make play RUN=mw_ppo_5x5x3_seed42_xxx
 
-# AI batch evaluation (no visualization)  
-python play.py --mode batch --num_episodes 100 --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/
-
-# Compare all experiments in training_runs directory
-python play.py --mode compare  --num_episodes 100 --training_run_dir ./training_runs/
+# Compare all runs in training_runs/
+make compare
 
 # Human play with custom environment
 python play.py --mode human --width 8 --height 8 --n_mines 12
 
-# Override environment settings while using saved model
-python play.py --mode agent --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
-  --width 10 --height 10 --n_mines 15 --delay 0.5
-
-# Use specific checkpoint step
-python play.py --mode batch --model_dir ./training_runs/ppo_run_5x5x3_seed42_20250705121812/ \
+# Advanced: use specific checkpoint or override env settings
+python play.py --mode batch --model_dir ./training_runs/run_name/ \
   --checkpoint_steps 500000 --num_episodes 50
-
-# Compare specific model directories
-python play.py --mode compare --model_dirs \
-  ./training_runs/model1/ \
-  ./training_runs/model2/ \
-  ./training_runs/model3/ \
-  --num_episodes 50
-
-# Load from config file instead of training run
-python play.py --mode agent --config ./configs/my_config.json
+python play.py --mode compare --model_dirs ./training_runs/m1/ ./training_runs/m2/ --num_episodes 50
 ```
 
 ### Continue Training
@@ -101,11 +101,12 @@ python train.py --continue_from ./training_runs/your_run_directory/ \
   --width 20 --height 20 --n_mines 60 --n_envs 12
 ```
 
-### Monitoring
+### Monitoring & Analysis
 
 ```bash
-# View training progress
-tensorboard --logdir ./training_runs/
+make tensorboard                                         # view curves in browser
+make analyze [RUN=run_name] [EXP_ID=exp_NNN]            # print metrics summary + save JSON
+make test                                                # run unit tests
 ```
 
 ## Key Features
@@ -184,24 +185,34 @@ python train.py --continue_from ./training_runs/your_run/ --config configs/local
 
 ```
 minesweeper_rl/
-├── configs/               # Configuration files
-│   ├── local_config.yaml      # Local testing configuration
-│   └── colab_config.yaml      # Colab training configuration
+├── configs/               # Base config templates (local/colab, not experiment-specific)
+│   ├── local_config.yaml
+│   └── colab_config.yaml
+├── experiments/           # Experiment tracking
+│   ├── configs/               # Per-experiment YAML (exp_NNN_description.yaml)
+│   ├── results/               # Auto-generated metrics JSON (git-tracked)
+│   ├── log.md                 # Hand-written experiment analysis & conclusions
+│   └── ideas.md               # Optimization backlog
+├── scripts/               # Workflow tooling
+│   ├── analyze.py             # Parse TensorBoard logs → metrics summary + JSON
+│   └── pull_run.sh            # Download run from Modal Volume
 ├── src/
 │   ├── env/               # Environment and CNN implementations
-│   │   ├── minesweeper_env.py  # Custom Gymnasium environment
-│   │   └── custom_cnn.py       # CNN feature extractor
+│   │   ├── minesweeper_env.py
+│   │   └── custom_cnn.py
 │   ├── config/            # Configuration system
-│   │   ├── config_manager.py   # Configuration management
-│   │   └── config_schemas.py   # Configuration data schemas
+│   │   ├── config_manager.py
+│   │   └── config_schemas.py
 │   ├── factories/         # Model and environment factories
-│   │   ├── environment_factory.py  # Environment creation
-│   │   └── model_factory.py        # Model creation
-│   └── utils/             # Utilities and legacy config
-│       ├── checkpoint_utils.py     # Checkpoint management
+│   │   ├── environment_factory.py
+│   │   └── model_factory.py
+│   └── utils/
+│       └── checkpoint_utils.py
 ├── tests/                 # Unit tests
-├── train.py              # Training script (new config system)
-├── play.py               # Playing/evaluation script (new config system)
-├── requirements.txt      # Python dependencies
-└── README.md            # This file
+├── training_runs/         # Local run cache (gitignored, download with make pull)
+├── Makefile               # Unified command interface (make train/pull/analyze/eval/…)
+├── train.py              # Training entry point
+├── train_modal.py        # Modal cloud training wrapper
+├── play.py               # Evaluation / play entry point
+└── requirements.txt
 ```
