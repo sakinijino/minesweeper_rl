@@ -1,5 +1,27 @@
 # 实验日志
 
+## EXP-003 续训到 2M 步 (2026-03-16)
+
+- **配置**：experiments/configs/exp_003_continue_2m.yaml
+- **续训自**：mw_ppo_5x5x3_seed42_20260316121733（EXP-002，800k 步）
+- **额外步数**：1,196,032（实际总步数 2,016,752）
+- **Run**：mw_ppo_5x5x3_seed42_20260316121733_continue_20260316124704
+- **指标 (TensorBoard)**：见 experiments/results/exp_003_metrics.json
+- **指标 (Eval)**：eval_win_rate = **83%**（100 局，seed=42，final_model）
+- **关键指标**：
+  - success_rate: 47% → 68% 最高 77%（本段新增 +30%）
+  - 累计成长：EXP-002 起点 10% → EXP-003 终点 77%
+  - explained_variance: 0.84（稳定，value function 拟合良好）
+  - entropy_loss: -0.92 → -0.51（策略进一步收敛，探索仍存在）
+- **分析**：
+  - 续训后 success_rate 从 47% 持续爬升到 77%，到 2M 步末尾曲线仍在 68-77% 间震荡，尚未完全 plateau
+  - eval 胜率 83% 显著超过 TensorBoard success_rate（训练时 ~70%），说明 eval 环境更"幸运"或模型在确定性 seed 下表现更稳定
+  - 相比 EXP-002，仅增加步数（唯一变量），胜率从 52% → 83%，涨幅 +31%，说明步数是当前的主要瓶颈
+  - 2M 步后仍有轻微上升趋势，但增速明显放缓（从 +43% 降到 +30%），可能正在逼近当前超参下的收敛上限
+- **结论**：步数从 800k → 2M 带来显著提升（52% → 83%）。当前超参下收敛上限约在 75-85%。建议下一步尝试超参调整（更大网络、learning rate 衰减）以突破瓶颈。
+
+---
+
 ## EXP-002 1M 步规模验证 (2026-03-16)
 
 - **配置**：experiments/configs/exp_002_1m_scale.yaml

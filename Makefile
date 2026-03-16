@@ -18,9 +18,10 @@
 #   make test
 
 # Defaults
-CONFIG ?= configs/modal_quick_config.yaml
-RUN    ?=
-EXP_ID ?=
+CONFIG        ?=
+RUN           ?=
+EXP_ID        ?=
+CONTINUE_FROM ?=
 
 # Activate venv if it exists (use . instead of source for /bin/sh compatibility)
 VENV_ACTIVATE = $(if $(wildcard .venv/bin/activate),. .venv/bin/activate &&,)
@@ -29,9 +30,10 @@ MODAL  = $(if $(wildcard .venv/bin/modal),.venv/bin/modal,modal)
 
 .PHONY: train pull analyze eval play compare tensorboard list test help
 
-## train: Launch Modal training with CONFIG (default: configs/modal_quick_config.yaml)
+## train: Launch Modal training with CONFIG (required)
 train:
-	$(MODAL) run --detach train_modal.py --config $(CONFIG)
+	$(MODAL) run --detach train_modal.py --config $(CONFIG) \
+		$(if $(CONTINUE_FROM),--continue-from $(CONTINUE_FROM),)
 
 ## pull: Pull RUN (or latest) from Modal Volume to training_runs/
 pull:
