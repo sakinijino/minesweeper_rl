@@ -1,0 +1,42 @@
+# EXP-004 Reward Shaping 验证
+# 目标：验证 reward 函数是否是 EXP-002/003 的训练瓶颈
+# 唯一变量：reward_win(0.2→1.0), reward_lose(-0.05→-1.0)
+# EXP-002 中 win 信号仅占总奖励 8%（0.2 vs reveal×22=2.2），调整后占比约 31%
+# 步数 1M（够看趋势，节省 GPU），其余超参与 EXP-002/003 完全一致
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 1_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

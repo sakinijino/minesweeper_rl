@@ -11,7 +11,7 @@
 - [ ] 学习率 schedule（线性衰减）
 - [ ] 更大网络（features_dim 256，更深 pi/vf layers）
 - [ ] entropy coefficient 衰减（初期高探索 → 后期低熵）
-- [ ] reward shaping 优化（当前 reward_win 0.2 较小）
+- [x] reward shaping 优化（reward_win 0.2→1.0，win 信号 8%→31%）→ EXP-004（@1M 步 75%，验证有效）
 - [ ] 多 seed 训练验证结果稳定性
 
 ## 已完成

@@ -1,5 +1,28 @@
 # 实验日志
 
+## EXP-004 Reward Shaping 验证 (2026-03-16)
+
+- **配置**：experiments/configs/exp_004_reward_shaping.yaml
+- **Run**：TBD
+- **假设**：EXP-002/003 中 reward_win=0.2 导致 win 信号仅占总奖励 8%，agent 更倾向"安全揭格"而非"追求胜利"
+- **变量**：reward_win: 0.2 → 1.0，reward_lose: -0.05 → -1.0（win 信号占比 8% → 31%）
+- **步数**：1M（够看趋势，节省 GPU），其余超参与 EXP-002/003 完全一致
+- **指标 (TensorBoard)**：见 experiments/results/exp_004_metrics.json
+- **指标 (Eval)**：eval_win_rate = **75%**（100 局，seed=42，@1M步）
+- **关键指标**：
+  - success_rate: 10% → 64%，最高 68%（vs EXP-002 同期 53%，+11%）
+  - ep_rew_mean: 0.75 → 2.31（reward 绝对值变大，符合预期）
+  - explained_variance: 最终 0.47（value function 拟合偏弱，相比 EXP-003 的 0.84 明显更差）
+  - entropy_loss: -2.67 → -0.58（收敛速度与 EXP-003 相似）
+- **分析**：
+  - @1M 步 eval 75%，远超目标 65%，也接近 EXP-003 @2M 步的 83%
+  - success_rate @1M 64% vs EXP-002 @800k 53%，同等步数下提升明显，说明 reward 确实是瓶颈
+  - explained_variance 0.47 偏低（EXP-003 达 0.84），value function 拟合不好——reward 量级变大（win=1.0 vs 0.2）导致 value 估计更难，可能需要更大的 vf_coef 或更长训练
+  - 单纯 1M 步已追上 EXP-003 2M 步 80% 的水平，效率提升显著
+- **结论**：reward 是主要瓶颈，修复后 1M 步 eval 75%（vs EXP-002 @800k 52%）。下一步可叠加更大网络（features_dim 256）或继续训练到 2M 步看能否超越 EXP-003 83%。
+
+---
+
 ## EXP-003 续训到 2M 步 (2026-03-16)
 
 - **配置**：experiments/configs/exp_003_continue_2m.yaml
