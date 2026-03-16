@@ -22,6 +22,7 @@ image = (
     )
     .add_local_dir("src", remote_path="/app/src")
     .add_local_dir("configs", remote_path="/app/configs")
+    .add_local_dir("experiments/configs", remote_path="/app/experiments/configs")
     .add_local_file("train.py", remote_path="/app/train.py")
 )
 

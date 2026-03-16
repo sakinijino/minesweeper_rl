@@ -1,0 +1,41 @@
+# EXP-002 1M 步规模验证配置
+# 目标：用足够步数确认模型收敛上限，验证 agent 能否真正学会 5×5×3 扫雷
+# 相比 EXP-001 只改两个变量：total_timesteps 10x，n_envs 2x
+# 其余超参完全保持 EXP-001 一致，以隔离实验变量
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 1_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

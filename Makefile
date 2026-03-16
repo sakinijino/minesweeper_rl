@@ -22,10 +22,10 @@ CONFIG ?= configs/modal_quick_config.yaml
 RUN    ?=
 EXP_ID ?=
 
-# Activate venv if it exists
-VENV_ACTIVATE = $(if $(wildcard .venv/bin/activate),source .venv/bin/activate &&,)
-PYTHON = $(VENV_ACTIVATE) python
-MODAL  = $(VENV_ACTIVATE) modal
+# Activate venv if it exists (use . instead of source for /bin/sh compatibility)
+VENV_ACTIVATE = $(if $(wildcard .venv/bin/activate),. .venv/bin/activate &&,)
+PYTHON = $(if $(wildcard .venv/bin/python),.venv/bin/python,python)
+MODAL  = $(if $(wildcard .venv/bin/modal),.venv/bin/modal,modal)
 
 .PHONY: train pull analyze eval play compare tensorboard list test help
 

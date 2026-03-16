@@ -1,5 +1,16 @@
 # 实验日志
 
+## EXP-002 1M 步规模验证 (2026-03-16)
+
+- **配置**：experiments/configs/exp_002_1m_scale.yaml
+- **Run**：[训练后填入]
+- **指标 (TensorBoard)**：见 experiments/results/exp_002_metrics.json（训练后生成）
+- **指标 (Eval)**：[训练后填入]
+- **分析**：[训练后填入]
+- **结论**：[训练后填入]
+
+---
+
 ## EXP-001 基线验证 (2026-03-16)
 
 - **配置**：experiments/configs/exp_001_baseline_100k.yaml

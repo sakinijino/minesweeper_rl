@@ -32,5 +32,8 @@ training_runs
 *~
 .DS_Store
 
+# Claude Code internal state
+.claude/
+
 # Other (add any specific files you want to ignore)
 # data/  # If you have large datasets
