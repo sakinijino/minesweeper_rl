@@ -1,5 +1,30 @@
 # 实验日志
 
+## EXP-005 续训 EXP-004 到 2M 步 (2026-03-16)
+
+- **配置**：experiments/configs/exp_005_continue_reward_2m.yaml
+- **续训自**：mw_ppo_5x5x3_seed42_20260316134208（EXP-004，1M 步）
+- **额外步数**：1,000,000（目标总步数约 2M）
+- **Run**：mw_ppo_5x5x3_seed42_20260316134208_continue_20260316144019
+- **假设**：EXP-004 @1M 已达 75%（超过 EXP-002 同期 52%），续训到 2M 步后期望超越 EXP-003 @2M 的 83%
+- **唯一变量**：步数（EXP-004 基础上续训，所有超参不变）
+- **指标 (TensorBoard)**：见 experiments/results/exp_005_metrics.json
+- **指标 (Eval)**：eval_win_rate = **84%**（100 局，seed=42，@2M步）
+- **关键指标**：
+  - success_rate: 66% → 74%，最高 83%（本段新增 +8%）
+  - value_loss: 1.55 → 0.97（下降 37%，value function 在追赶，但仍高于 EXP-003 的水平）
+  - explained_variance: 0.44-0.46 区间震荡，**未能回升**（EXP-003 达到 0.84，差距巨大）
+  - entropy_loss: -0.57 → -0.40（策略继续收敛，探索减少）
+- **分析**：
+  - eval 84% 略超 EXP-003（83%），但只差 1%，不能认为是显著突破
+  - explained_variance 全程卡在 0.44 附近，续训 1M 步没有改善——这是结构性问题，不是步数问题
+  - value_loss 从 1.55 下降到 0.97，说明 value function 在缓慢追赶，但最终仍未充分拟合
+  - 结论符合预案中的 "≤85%" 场景：**explained_variance 是真正瓶颈**，需要修复 vf_coef
+- **结论**：新 reward @2M = 84%，与旧 reward @2M（EXP-003 = 83%）几乎持平。续训没有带来明显突破。explained_variance 长期偏低（0.44 vs 0.84）是核心瓶颈，下一步必须修复 vf_coef（0.5 → 1.0）。
+- **后续规划**：EXP-006 = 新 reward + vf_coef=1.0 + 从头训练 2M 步
+
+---
+
 ## EXP-004 Reward Shaping 验证 (2026-03-16)
 
 - **配置**：experiments/configs/exp_004_reward_shaping.yaml

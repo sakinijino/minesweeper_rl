@@ -1,0 +1,41 @@
+# EXP-005 续训 EXP-004（new reward shaping）到约 2M 步
+# 目标：获得 "new reward @2M" 基准，与 EXP-003(old reward @2M=83%) 对比
+# continue_from 命令行传入 EXP-004 run 路径
+# 唯一变量：步数（额外 1M，合计约 2M）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 1_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
