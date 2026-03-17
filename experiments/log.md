@@ -1,5 +1,32 @@
 # 实验日志
 
+## EXP-007 多通道观测 (2026-03-17)
+
+- **配置**：experiments/configs/exp_007_multichannel_obs.yaml
+- **假设**：单通道将"未揭开"(-2→0.0) 和"已揭数字"(0-8→0.2-1.0) 线性混合，value function 无法区分两类语义不同的状态；双通道分离编码（ch0=未揭开掩码，ch1=已揭数字）应能让 value function 更好拟合，explained_variance 从 0.44 回升至 0.6+
+- **唯一变量**：obs_channels: 1 → 2（ch0=is_unrevealed, ch1=neighbor_counts/8.0）
+- **对比基准**：EXP-006（单通道 + vf_coef=1.0 @2M = 80%，explained_var=0.46）
+- **步数**：2M（从头训练）
+- **Run**：mw_ppo_5x5x3_seed42_20260317041904
+- **指标 (TensorBoard)**：见 experiments/results/exp_007_metrics.json
+- **指标 (Eval)**：eval_win_rate = **86%**（100 局，seed=42，@2M步）
+- **关键指标**：
+  - success_rate: 10% → 83%，最高 88%（历史最高）
+  - value_loss: 0.96 → 0.78（比 EXP-006 的 0.91 下降更多）
+  - explained_variance: max 0.46，final 0.43（**与 EXP-005/006 几乎相同，未突破**）
+  - entropy_loss: -2.66 → -0.42（收敛节奏正常）
+- **分析**：
+  - eval 86% 是历史最高，超越 EXP-005（84%）和 EXP-006（80%）——双通道观测带来实际胜率提升
+  - 但 explained_variance 依然卡在 0.43，假设"双通道能突破 value function 拟合瓶颈"**未被验证**
+  - 双通道早期收敛更快（50k 步 explained_variance 已达 0.35+，EXP-006 早期几乎为负），说明信息表示更清晰
+  - 然而最终天花板没有突破——对比 EXP-003（旧 reward）explained_variance=0.84，差距仍巨大
+  - value_loss 下降更多（0.78 vs 0.91）但 explained_variance 没有跟上，说明网络在拟合均值，但方差解释能力受限于**网络容量**
+  - **核心结论**：explained_variance 瓶颈不在观测编码，而在网络容量（features_dim=128 不足）
+- **结论**：双通道观测值得保留（胜率 +2~6%，早期收敛更快），但不是 explained_variance 瓶颈的根本原因。真正的瓶颈是网络容量不足。
+- **后续规划**：EXP-008 = 双通道 + features_dim 128 → 256，验证扩大网络容量能否让 explained_variance 回升到 0.6+
+
+---
+
 ## EXP-006 修复 vf_coef（待运行）
 
 - **配置**：experiments/configs/exp_006_vf_coef_fix.yaml

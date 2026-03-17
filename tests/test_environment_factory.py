@@ -32,7 +32,7 @@ class TestEnvConfig:
         """Test creating environment config from ConfigManager with default values."""
         config_manager = create_test_config_manager()
         config = create_env_config(config_manager=config_manager)
-        
+
         assert config is not None
         assert 'width' in config
         assert 'height' in config
@@ -42,13 +42,27 @@ class TestEnvConfig:
         assert 'reward_reveal' in config
         assert 'reward_invalid' in config
         assert 'max_reward_per_step' in config
+        assert 'obs_channels' in config
         assert 'render_mode' in config
         assert 'render_fps' in config
-        
+
         # All values should be non-None except render_mode and max_reward_per_step
         for key, value in config.items():
             if key not in ['render_mode', 'max_reward_per_step']:  # these can be None
                 assert value is not None, f"ConfigManager should provide non-None default for {key}"
+
+    def test_create_env_config_obs_channels_default(self):
+        """obs_channels defaults to 1 and is passed through to env config."""
+        config_manager = create_test_config_manager()
+        config = create_env_config(config_manager=config_manager)
+        assert config['obs_channels'] == 1
+
+    def test_create_env_config_obs_channels_matches_schema(self):
+        """obs_channels in env config matches EnvironmentConfig value."""
+        config_manager = create_test_config_manager()
+        config = create_env_config(config_manager=config_manager)
+        expected = config_manager.get_config().environment_config.obs_channels
+        assert config['obs_channels'] == expected
     
     def test_create_env_config_with_render_mode(self):
         """Test creating environment config with custom render mode."""

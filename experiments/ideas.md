@@ -2,12 +2,12 @@
 
 ## 待探索
 
-- [ ] 多通道观察表示（分离未揭开/数字/地雷计数信道）
+- [x] 多通道观察表示（分离未揭开/数字/地雷计数信道）→ EXP-007（86%，胜率+，但 explained_var 未突破）
 - [ ] 邻居计算改为 scipy 卷积（性能优化）
 - [ ] 课程学习（从小棋盘到大棋盘，或从少地雷到多地雷）
 - [ ] 调大 n_envs（目前 8，T4 应该可以跑 16-32）
 - [ ] 学习率 schedule（线性衰减）
-- [ ] 更大网络（features_dim 256，更深 pi/vf layers）
+- [ ] 更大网络（features_dim 256，更深 pi/vf layers）← **下一优先级**，EXP-007 确认容量是 explained_var 瓶颈
 - [ ] entropy coefficient 衰减（初期高探索 → 后期低熵）
 - [x] 修复 vf_coef（0.5 → 1.0）+ 新 reward 从头跑 2M 步 → EXP-006（80%，vf_coef 非瓶颈）
 - [ ] 多 seed 训练验证结果稳定性

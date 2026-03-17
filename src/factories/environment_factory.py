@@ -75,6 +75,7 @@ def create_env_config(
         'reward_reveal': env_config_obj.reward_reveal,
         'reward_invalid': env_config_obj.reward_invalid,
         'max_reward_per_step': env_config_obj.max_reward_per_step,
+        'obs_channels': env_config_obj.obs_channels,
         'render_mode': render_mode,
         'render_fps': render_fps
     }

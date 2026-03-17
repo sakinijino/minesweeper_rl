@@ -8,7 +8,7 @@ class MinesweeperEnv(gym.Env):
 
     def __init__(self, width=10, height=10, n_mines=10, render_mode='human',
                  reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1,
-                 max_reward_per_step=None, render_fps=30):
+                 max_reward_per_step=None, render_fps=30, obs_channels=1):
         super().__init__()
 
         self.width = width
@@ -33,13 +33,11 @@ class MinesweeperEnv(gym.Env):
         self.reward_reveal = reward_reveal  # 每揭开一个安全格子的奖励
         self.reward_invalid = reward_invalid  # 点击已揭开格子的惩罚
         self.max_reward_per_step = max_reward_per_step  # 单步最大奖励限制
+        self.obs_channels = obs_channels
 
-        # 修改为 (添加通道维度, 使用 float32):
-        # 注意：low 和 high 可以根据你的归一化策略调整，这里暂时保持原逻辑范围
-        # 但建议在 _get_obs 中进行归一化，并将 low/high 设置为归一化后的范围，例如 0/1 或 -1/1
         self.observation_space = spaces.Box(
-            low=0.0, high=1.0, # 假设我们将归一化到 0-1 范围
-            shape=(1, self.height, self.width), # (通道数, 高度, 宽度)
+            low=0.0, high=1.0,
+            shape=(self.obs_channels, self.height, self.width),
             dtype=np.float32
         )
 
@@ -56,27 +54,19 @@ class MinesweeperEnv(gym.Env):
         self.font = None
 
     def _get_obs(self):
-        # 返回给智能体的观察状态
-        # 隐藏地雷位置，只显示 -2 (未揭开) 或 0-8 (已揭开)
-        obs = self.board.copy()
-        obs[self.mine_locations] = -2 # 隐藏地雷
-        # mlp 可以直接返回 obs
-        # return obs
-
-        # --- 新增：归一化和类型转换 ---
-        # 简单的线性归一化: 将 [-2, 8] 映射到 [0, 1]
-        # -2 -> 0
-        # 8 -> 1
-        # 公式: (value - min_val) / (max_val - min_val)
-        min_val = -2.0
-        max_val = 8.0
-        obs_normalized = (obs.astype(np.float32) - min_val) / (max_val - min_val)
-
-        # --- 新增：调整形状 ---
-        # 添加通道维度: (H, W) -> (1, H, W)
-        obs_final = np.expand_dims(obs_normalized, axis=0)
-
-        return obs_final # 返回 shape=(1, H, W), dtype=float32, 范围 [0, 1] 的数组
+        if self.obs_channels == 1:
+            # 单通道：线性归一化将 [-2, 8] 映射到 [0, 1]
+            obs = self.board.copy()
+            obs[self.mine_locations] = -2  # 隐藏地雷
+            min_val = -2.0
+            max_val = 8.0
+            obs_normalized = (obs.astype(np.float32) - min_val) / (max_val - min_val)
+            return np.expand_dims(obs_normalized, axis=0)  # shape=(1, H, W)
+        else:
+            # 双通道：ch0=未揭开掩码，ch1=已揭开数字（归一化）
+            ch0 = (~self.revealed).astype(np.float32)  # 1.0=未揭开，0.0=已揭开
+            ch1 = np.where(self.revealed, self.neighbor_counts / 8.0, 0.0).astype(np.float32)
+            return np.stack([ch0, ch1], axis=0)  # shape=(2, H, W)
 
     def _get_info(self):
         # 返回辅助信息，例如剩余地雷数、是否胜利等

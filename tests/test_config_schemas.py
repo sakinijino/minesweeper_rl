@@ -187,6 +187,23 @@ class TestEnvironmentConfig:
         assert sample_environment_config.n_mines == 40
         assert sample_environment_config.reward_win == 10.0
 
+    def test_obs_channels_default(self):
+        """obs_channels defaults to 1 (backward compatible)."""
+        env_config = EnvironmentConfig(
+            width=5, height=5, n_mines=3,
+            reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1
+        )
+        assert env_config.obs_channels == 1
+
+    def test_obs_channels_explicit_two(self):
+        """obs_channels=2 can be set explicitly."""
+        env_config = EnvironmentConfig(
+            width=5, height=5, n_mines=3,
+            reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1,
+            obs_channels=2
+        )
+        assert env_config.obs_channels == 2
+
     def test_environment_validation_valid(self, sample_environment_config):
         """Test environment parameter validation with valid config."""
         assert validate_environment_config(sample_environment_config) is True

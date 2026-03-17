@@ -48,6 +48,7 @@ class EnvironmentConfig:
     reward_reveal: float
     reward_invalid: float
     max_reward_per_step: Optional[float] = None
+    obs_channels: int = 1  # 1=单通道（原行为），2=双通道分离观测
 
 
 @dataclass
