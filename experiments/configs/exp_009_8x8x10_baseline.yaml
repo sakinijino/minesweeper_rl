@@ -1,0 +1,42 @@
+# EXP-009 8×8×10 基准，从头训练 5M 步
+# 目标：建立标准初级扫雷基准胜率
+# 唯一变量：棋盘 5×5×3 → 8×8×10，步数 2M → 5M
+# 对比基准：EXP-007（5×5×3 @1.75M = 87%）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 8
+  height: 8
+  n_mines: 10
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 5_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 100000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
