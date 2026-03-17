@@ -1,5 +1,36 @@
 # 实验日志
 
+## EXP-008 扩大网络容量 (2026-03-17)
+
+- **配置**：experiments/configs/exp_008_larger_network.yaml
+- **假设**：EXP-007 双通道 explained_variance 仍卡在 0.43，与 EXP-003（旧 reward）的 0.84 差距巨大；新 reward win=1.0（旧 0.2）量级增加 5×，features_dim=128 的 Linear 层输出瓶颈导致 value function 无法拟合更大方差；扩容至 256 应能让 explained_variance 回升至 0.6+
+- **唯一变量**：features_dim: 128 → 256（不能续训 EXP-007，权重维度不兼容）
+- **对比基准**：EXP-007（双通道 + features_dim=128 @2M = 86%，explained_var=0.43）
+- **步数**：2M（从头训练）
+- **Run**：mw_ppo_5x5x3_seed42_20260317075354
+- **指标 (TensorBoard)**：见 experiments/results/exp_008_metrics.json
+- **指标 (Eval)**：eval_win_rate = **86%**（100 局，seed=42，@2M步）——与 EXP-007 完全相同
+- **关键指标**：
+  - success_rate: 9% → 87%，最高 89%（略高于 EXP-007 的 88%）
+  - value_loss: 0.948 → 0.808（比 EXP-007 的 0.96→0.78 下降幅度相近）
+  - explained_variance: max 0.468，final 0.425（**仅微升，远未达到 0.6 目标**）
+  - entropy_loss: -2.67 → -0.47（收敛节奏正常）
+  - fps: 早期 ~1700，末期 ~1234（比 EXP-007 下降约 22%）
+  - 训练时长：约 27 分钟
+- **分析**：
+  - eval 86% 与 EXP-007 完全持平——features_dim 加倍对最终胜率无任何改善
+  - explained_variance max 仅从 0.43 升到 0.47，完全未达到 0.6 目标，**网络容量假设被否定**
+  - value_loss 末期 0.81（vs EXP-007 的 0.78），下降幅度相近，说明更大网络只是在同等困难下做了类似的工作
+  - 对比 EXP-003（旧 reward，features_dim=128，explained_var=0.84）：相同网络容量在旧 reward 下能完美拟合；新 reward 下无论加多少容量，explained_var 都卡在 0.43-0.47
+  - **核心结论**：explained_variance 瓶颈不在网络容量，而在于 value function 本身面对的信息量/任务难度。可能的原因：(1) 新 reward（win=1.0）下单局结果方差极高（随机地雷布局），value网络无法准确预期回报；(2) pi/vf 共享 CNN 特征，策略更新持续破坏 value 拟合
+- **结论**：features_dim 128→256 无效。网络容量不是 explained_variance 瓶颈的根本原因。需另辟蹊径：考虑延长训练步数（4M+）、lr schedule、分开 pi/vf 网络，或接受当前 ~0.45 的 explained_var 上限，转而专注提升 eval 胜率（如更大 n_steps、multi-seed 验证）。
+- **后续规划**：
+  - 接受 explained_variance ~0.45 是该 reward 设置下的结构性上限，转向提升 eval 胜率策略
+  - 考虑延长训练到 4M 步（续训 EXP-008），观察 eval 是否能突破 86%
+  - 或探索 pi/vf 层扩容（[128,128]）——与 features_dim 独立，可验证是否改善 value 拟合
+
+---
+
 ## EXP-007 多通道观测 (2026-03-17)
 
 - **配置**：experiments/configs/exp_007_multichannel_obs.yaml
@@ -27,7 +58,7 @@
 
 ---
 
-## EXP-006 修复 vf_coef（待运行）
+## EXP-006 修复 vf_coef（2026-03-17）
 
 - **配置**：experiments/configs/exp_006_vf_coef_fix.yaml
 - **假设**：EXP-004/005 的 explained_variance 长期卡在 0.44，是因为 vf_coef=0.5 在新 reward 量级（win=1.0）下 value gradient 不足；提升到 1.0 应能让 value function 充分拟合，进而带动 eval_win_rate 突破 84%
