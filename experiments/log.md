@@ -6,21 +6,21 @@
 - **假设**：EXP-004/005 的 explained_variance 长期卡在 0.44，是因为 vf_coef=0.5 在新 reward 量级（win=1.0）下 value gradient 不足；提升到 1.0 应能让 value function 充分拟合，进而带动 eval_win_rate 突破 84%
 - **唯一变量**：vf_coef: 0.5 → 1.0
 - **步数**：2M（从头训练，与 EXP-005 对称比较）
-- **Run**：TBD
-- **指标 (Eval)**：eval_win_rate = TBD
-- **关键观测指标**：
-  - explained_variance：是否回升至 0.7+（EXP-003 达到 0.84）
-  - value_loss：是否显著下降（目标 <0.5，EXP-003 为 0.26）
-  - eval_win_rate：是否超越 EXP-005 的 84%
-- **后续规划**：
-  - explained_variance >0.7 且 eval >88%：vf_coef 是关键，下一步叠加更大网络（features_dim 256）
-  - explained_variance 回升但 eval 84-88%：value fitting 改善但策略上限在此，考虑 lr schedule
-  - explained_variance 没有回升：问题不是 vf_coef，需要重新诊断
-
-**启动命令**：
-```bash
-make train CONFIG=experiments/configs/exp_006_vf_coef_fix.yaml
-```
+- **Run**：mw_ppo_5x5x3_seed42_20260317031520
+- **指标 (TensorBoard)**：见 experiments/results/exp_006_metrics.json
+- **指标 (Eval)**：eval_win_rate = **80%**（100 局，seed=42，@2M步）
+- **关键指标**：
+  - success_rate: 10% → 75%，最高 79%（与 EXP-004/005 相近）
+  - value_loss: 0.97 → 0.91（仅微降，远未到 EXP-003 的 0.26）
+  - explained_variance: max 0.52，final 0.46（稍高于 EXP-005 的 0.44，但**远未回升到 0.7+**）
+  - entropy_loss: -2.67 → -0.36（收敛节奏与 EXP-004/005 相同）
+- **分析**：
+  - eval 80% 比 EXP-005（84%）还低——vf_coef 加倍不仅没有帮助，反而可能挤压了策略梯度
+  - explained_variance max 仅 0.52（EXP-005 max 0.46），提升极其微弱，说明 vf_coef **不是** explained_variance 偏低的根本原因
+  - value_loss 基本没变（0.91 vs 0.97），说明 value function 的拟合能力受限于特征质量，而非优化力度
+  - **核心结论**：瓶颈在于观测表示/网络容量，而非训练超参。当前单通道 [-1,0-8] 编码对 value function 信息量不足
+- **结论**：vf_coef 修复无效，排除超参层面的解释。瓶颈是架构层面——需要更丰富的观测编码（多通道）或更大网络（features_dim 256）
+- **后续规划**：EXP-007 = 多通道观测（分离未揭开/数字/地雷计数信道），保持其余超参不变
 
 ---
 
