@@ -1,5 +1,29 @@
 # 实验日志
 
+## EXP-006 修复 vf_coef（待运行）
+
+- **配置**：experiments/configs/exp_006_vf_coef_fix.yaml
+- **假设**：EXP-004/005 的 explained_variance 长期卡在 0.44，是因为 vf_coef=0.5 在新 reward 量级（win=1.0）下 value gradient 不足；提升到 1.0 应能让 value function 充分拟合，进而带动 eval_win_rate 突破 84%
+- **唯一变量**：vf_coef: 0.5 → 1.0
+- **步数**：2M（从头训练，与 EXP-005 对称比较）
+- **Run**：TBD
+- **指标 (Eval)**：eval_win_rate = TBD
+- **关键观测指标**：
+  - explained_variance：是否回升至 0.7+（EXP-003 达到 0.84）
+  - value_loss：是否显著下降（目标 <0.5，EXP-003 为 0.26）
+  - eval_win_rate：是否超越 EXP-005 的 84%
+- **后续规划**：
+  - explained_variance >0.7 且 eval >88%：vf_coef 是关键，下一步叠加更大网络（features_dim 256）
+  - explained_variance 回升但 eval 84-88%：value fitting 改善但策略上限在此，考虑 lr schedule
+  - explained_variance 没有回升：问题不是 vf_coef，需要重新诊断
+
+**启动命令**：
+```bash
+make train CONFIG=experiments/configs/exp_006_vf_coef_fix.yaml
+```
+
+---
+
 ## EXP-005 续训 EXP-004 到 2M 步 (2026-03-16)
 
 - **配置**：experiments/configs/exp_005_continue_reward_2m.yaml

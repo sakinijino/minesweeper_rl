@@ -12,7 +12,8 @@
 - [ ] 更大网络（features_dim 256，更深 pi/vf layers）
 - [ ] entropy coefficient 衰减（初期高探索 → 后期低熵）
 - [x] reward shaping 优化（reward_win 0.2→1.0，win 信号 8%→31%）→ EXP-004（@1M 步 75%，验证有效）
-- [x] 续训 EXP-004 到 2M 步，获得 "new reward @2M" 基准 → EXP-005（进行中）
+- [x] 续训 EXP-004 到 2M 步，获得 "new reward @2M" 基准 → EXP-005（84%，explained_var 卡在 0.44）
+- [ ] 修复 vf_coef（0.5 → 1.0）+ 新 reward 从头跑 2M 步 → EXP-006（待运行）
 - [ ] 多 seed 训练验证结果稳定性
 
 ## 已完成

@@ -1,0 +1,41 @@
+# EXP-006 修复 vf_coef（0.5 → 1.0），新 reward，从头训练 2M 步
+# 目标：验证 vf_coef 是否是 explained_variance 偏低的根本原因
+# 唯一变量：vf_coef（0.5 → 1.0），其余超参与 EXP-004/005 完全一致
+# 对比基准：EXP-005（new reward + vf_coef=0.5 @2M = 84%）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+
+training_execution:
+  total_timesteps: 2_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
