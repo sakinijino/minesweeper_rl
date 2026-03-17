@@ -1,0 +1,43 @@
+# EXP-010 课程学习 5×5×3 → 8×8×10
+# 目标：验证 Conv 权重迁移能否加速 8×8×10 学习
+# 对比：EXP-009（from scratch 5M steps = 0%）
+# Source：EXP-007 best checkpoint @1.75M steps（5×5×3 eval 87%）
+# transfer_from 通过 CLI 传入：mw_ppo_5x5x3_seed42_20260317041904
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 8
+  height: 8
+  n_mines: 10
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 5_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 100000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

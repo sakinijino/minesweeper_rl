@@ -37,7 +37,8 @@ RUNS_DIR = "/runs"
     volumes={RUNS_DIR: volume},
     timeout=7200,  # 2 hours max
 )
-def train(config: str = "configs/colab_config.yaml", continue_from: str = ""):
+def train(config: str = "configs/colab_config.yaml", continue_from: str = "",
+          transfer_from: str = "", transfer_steps: int = 0):
     import subprocess
     import sys
     import os
@@ -51,6 +52,10 @@ def train(config: str = "configs/colab_config.yaml", continue_from: str = ""):
     ]
     if continue_from:
         cmd += ["--continue_from", f"{RUNS_DIR}/{continue_from}"]
+    if transfer_from:
+        cmd += ["--transfer_from", f"{RUNS_DIR}/{transfer_from}"]
+    if transfer_steps:
+        cmd += ["--transfer_steps", str(transfer_steps)]
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -60,6 +65,8 @@ def train(config: str = "configs/colab_config.yaml", continue_from: str = ""):
 
 
 @app.local_entrypoint()
-def main(config: str = "configs/colab_config.yaml", continue_from: str = ""):
+def main(config: str = "configs/colab_config.yaml", continue_from: str = "",
+         transfer_from: str = "", transfer_steps: int = 0):
     print(f"Launching training on Modal (GPU: T4) with config: {config}")
-    train.remote(config=config, continue_from=continue_from)
+    train.remote(config=config, continue_from=continue_from,
+                 transfer_from=transfer_from, transfer_steps=transfer_steps)

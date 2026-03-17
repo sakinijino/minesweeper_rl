@@ -18,10 +18,12 @@
 #   make test
 
 # Defaults
-CONFIG        ?=
-RUN           ?=
-EXP_ID        ?=
-CONTINUE_FROM ?=
+CONFIG         ?=
+RUN            ?=
+EXP_ID         ?=
+CONTINUE_FROM  ?=
+TRANSFER_FROM  ?=
+TRANSFER_STEPS ?=
 
 # Activate venv if it exists (use . instead of source for /bin/sh compatibility)
 VENV_ACTIVATE = $(if $(wildcard .venv/bin/activate),. .venv/bin/activate &&,)
@@ -33,7 +35,9 @@ MODAL  = $(if $(wildcard .venv/bin/modal),.venv/bin/modal,modal)
 ## train: Launch Modal training with CONFIG (required)
 train:
 	$(MODAL) run --detach train_modal.py --config $(CONFIG) \
-		$(if $(CONTINUE_FROM),--continue-from $(CONTINUE_FROM),)
+		$(if $(CONTINUE_FROM),--continue-from $(CONTINUE_FROM),) \
+		$(if $(TRANSFER_FROM),--transfer-from $(TRANSFER_FROM),) \
+		$(if $(TRANSFER_STEPS),--transfer-steps $(TRANSFER_STEPS),)
 
 ## pull: Pull RUN (or latest) from Modal Volume to training_runs/
 pull:

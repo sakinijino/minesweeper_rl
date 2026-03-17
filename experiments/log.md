@@ -1,5 +1,25 @@
 # 实验日志
 
+## EXP-010 课程学习 5×5×3 → 8×8×10 (2026-03-17)
+
+- **配置**：experiments/configs/exp_010_curriculum_5x5_to_8x8.yaml
+- **假设**：Conv 权重（spatial pattern detector）在 5×5 和 8×8 棋盘间可直接迁移（shape 相同）；EXP-007 已学会的空间特征能加速 8×8×10 策略学习，让模型在 5M 步内突破 0% 胜率（EXP-009 全程 0%）
+- **唯一变量**：vs EXP-009 ——增加 Conv 权重迁移（EXP-007 @1.75M steps），其余超参不变
+- **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%）；EXP-007（5×5×3 @1.75M = 87%，transfer 来源）
+- **Source checkpoint**：mw_ppo_5x5x3_seed42_20260317041904，step 1750000
+- **步数**：5M（从头计数，transfer 只迁移权重，不继承 timesteps）
+- **Run**：TBD
+- **指标 (TensorBoard)**：TBD → experiments/results/exp_010_metrics.json
+- **指标 (Eval)**：TBD
+- **关键观测**：
+  - 前 1M 步 success_rate 是否 > 0%（vs EXP-009 全程 0%）
+  - 最终 eval_win_rate 是否 > 0%
+  - 学习起飞时间对比 EXP-009
+- **分析**：TBD
+- **结论**：TBD
+
+---
+
 ## EXP-009 8×8×10 基准训练 (2026-03-17)
 
 - **配置**：experiments/configs/exp_009_8x8x10_baseline.yaml

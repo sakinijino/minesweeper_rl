@@ -6,9 +6,12 @@ with consistent configuration. It centralizes the model creation logic to elimin
 code duplication between train.py and play.py.
 """
 
+import io
 import os
+import zipfile
 from typing import Dict, List, Optional, Tuple, Union, Any
 
+import torch as th
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.vec_env import VecNormalize
 from ..env.custom_cnn import CustomCNN
@@ -279,6 +282,46 @@ def get_model_summary(model: MaskablePPO) -> Dict[str, Any]:
         'vf_coef': model.vf_coef,
         'seed': model.seed
     }
+
+
+def transfer_compatible_weights(source_checkpoint_path: str, target_model: MaskablePPO) -> Dict[str, List[str]]:
+    """
+    Transfer shape-compatible weights from a source checkpoint to a target model.
+
+    Layers whose shapes match exactly are copied; layers with mismatched shapes
+    (e.g. the board-size-dependent Linear weight, or action head) are left at
+    their randomly-initialised values.  This allows curriculum transfer between
+    models trained on different board sizes.
+
+    Args:
+        source_checkpoint_path: Path to SB3-format .zip checkpoint (must contain policy.pth)
+        target_model: MaskablePPO model whose policy weights will be partially updated
+
+    Returns:
+        Dict with keys 'transferred' and 'skipped', each containing a list of layer names
+    """
+    if not os.path.exists(source_checkpoint_path):
+        raise FileNotFoundError(f"Source checkpoint not found: {source_checkpoint_path}")
+
+    with zipfile.ZipFile(source_checkpoint_path, 'r') as archive:
+        with archive.open('policy.pth') as f:
+            source_state = th.load(io.BytesIO(f.read()), map_location='cpu')
+
+    target_state = target_model.policy.state_dict()
+    new_state = {}
+    transferred: List[str] = []
+    skipped: List[str] = []
+
+    for k, v in target_state.items():
+        if k in source_state and source_state[k].shape == v.shape:
+            new_state[k] = source_state[k]
+            transferred.append(k)
+        else:
+            new_state[k] = v
+            skipped.append(k)
+
+    target_model.policy.load_state_dict(new_state)
+    return {'transferred': transferred, 'skipped': skipped}
 
 
 # For backward compatibility and convenience

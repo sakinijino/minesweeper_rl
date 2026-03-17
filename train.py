@@ -5,7 +5,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 
 from src.config.config_manager import ConfigManager
 
-from src.factories.model_factory import create_model
+from src.factories.model_factory import create_model, transfer_compatible_weights
 from src.factories.environment_factory import create_training_environment
 
 from src.utils.checkpoint_utils import (
@@ -55,10 +55,16 @@ def setup_argument_parser():
                         help="Prefix for saved model files")
 
     # Continue training
-    parser.add_argument("--continue_from", type=str, default=None, 
+    parser.add_argument("--continue_from", type=str, default=None,
                         help="Directory path containing checkpoints to continue training from")
-    parser.add_argument("--continue_steps", type=int, default=None, 
+    parser.add_argument("--continue_steps", type=int, default=None,
                         help="Specific step checkpoint to continue from")
+
+    # Curriculum transfer (new model + compatible weights from a different-board-size run)
+    parser.add_argument("--transfer_from", type=str, default=None,
+                        help="Run directory to transfer compatible weights from (new model, no config/vecnorm loading)")
+    parser.add_argument("--transfer_steps", type=int, default=None,
+                        help="Specific step checkpoint to transfer weights from")
 
     # Advanced parameters (less commonly overridden)
     parser.add_argument("--n_steps", type=int, default=None, 
@@ -421,36 +427,54 @@ def main():
     # 1. Setup argument parser
     parser = setup_argument_parser()
     args = parser.parse_args()
-    
-    # 2. Load and setup configuration
+
+    # 2. Resolve transfer checkpoint path (before config loading so errors surface early)
+    transfer_checkpoint_path = None
+    if getattr(args, 'transfer_from', None):
+        try:
+            paths_result = resolve_continue_training_paths(args.transfer_from, args.transfer_steps)
+            transfer_checkpoint_path = paths_result['checkpoint_path']
+            print(f"Transfer checkpoint resolved: {transfer_checkpoint_path}")
+        except Exception as e:
+            print(f"Error resolving transfer checkpoint: {e}")
+            exit(1)
+
+    # 3. Load and setup configuration
     config_manager, continue_training, checkpoint_path, loaded_config, original_run_dir = load_and_setup_config(args)
-    
-    # 3. Print configuration information
+
+    # 4. Print configuration information
     print_training_configuration(config_manager)
-    
-    # 4. Create training directories
+
+    # 5. Create training directories
     run_dir, specific_log_dir, specific_model_dir, config_save_path, final_model_path, stats_path = create_training_directories(
         config_manager, continue_training, original_run_dir
     )
-    
-    # 5. Save training configuration
+
+    # 6. Save training configuration
     save_training_config(config_manager, config_save_path)
-    
-    # 6. Create training environment
+
+    # 7. Create training environment
     train_env = create_training_environment_from_config(config_manager)
     print(f"Environment VecNormalize stats will be saved to: {stats_path}")
-    
-    # 7. Setup checkpoint callback
+
+    # 8. Setup checkpoint callback
     checkpoint_callback = setup_checkpoint_callback(config_manager, specific_model_dir)
-    
-    # 8. Create training model
+
+    # 9. Create training model
     model, train_env = create_model_from_config(
         config_manager, train_env, continue_training, checkpoint_path, specific_log_dir
     )
-    
-    # 9. Execute training loop
+
+    # 10. Apply curriculum weight transfer if requested
+    if transfer_checkpoint_path:
+        print(f"Applying curriculum weight transfer from: {transfer_checkpoint_path}")
+        stats = transfer_compatible_weights(transfer_checkpoint_path, model)
+        print(f"  Transferred: {len(stats['transferred'])} layers")
+        print(f"  Skipped:     {len(stats['skipped'])} layers (shape mismatch)")
+
+    # 11. Execute training loop
     run_training_loop(
-        model, config_manager, checkpoint_callback, continue_training, 
+        model, config_manager, checkpoint_callback, continue_training,
         final_model_path, stats_path, train_env
     )
 
