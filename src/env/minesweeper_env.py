@@ -158,11 +158,8 @@ class MinesweeperEnv(gym.Env):
             # 点击已揭开的格子 -> 惩罚
             reward = self.reward_invalid
         elif self.mines[row, col]:
-            # 点击到地雷 -> 失败，大惩罚 + 完成进度奖励
-            total_safe = self.height * self.width - self.n_mines
-            safe_revealed = int(np.sum(self.revealed))  # 踩雷前已揭开的安全格
-            progress_bonus = self.reward_progress_coef * (safe_revealed / total_safe)
-            reward = self.reward_lose + progress_bonus
+            # 点击到地雷 -> 失败，固定惩罚（不加进度 bonus，避免软化死亡代价）
+            reward = self.reward_lose
             self.revealed[row, col] = True
             self.board[row, col] = -1 # 标记为地雷
             self.game_over = True
@@ -174,10 +171,16 @@ class MinesweeperEnv(gym.Env):
             self._reveal_cell(row, col)
             revealed_after = np.sum(self.revealed)
             revealed_count = revealed_after - revealed_before
-            
+
             # 计算基础奖励
             reward = revealed_count * self.reward_reveal
-            
+
+            # 揭格进度乘数：完成度越高，揭格奖励越大（reward_progress_coef=0 时退化为原行为）
+            if self.reward_progress_coef > 0.0:
+                total_safe = self.height * self.width - self.n_mines
+                safe_revealed_ratio = revealed_after / total_safe
+                reward *= (1 + self.reward_progress_coef * safe_revealed_ratio)
+
             # 如果设置了单步最大奖励限制，则对奖励进行裁剪
             if self.max_reward_per_step is not None:
                 reward = min(reward, self.max_reward_per_step)

@@ -462,3 +462,64 @@ class TestIntegrationScenarios:
                 
                 assert model == mock_model
                 assert env == mock_normalized_env
+
+
+class TestLRSchedule:
+    """Test cosine learning rate schedule support (EXP-014)."""
+
+    @pytest.fixture
+    def mock_env(self):
+        mock_env = Mock()
+        mock_env.observation_space = gym.spaces.Box(low=0, high=1, shape=(1, 5, 5))
+        mock_env.action_space = gym.spaces.Discrete(25)
+        return mock_env
+
+    def test_cosine_lr_is_callable(self, mock_env):
+        """lr_schedule='cosine' 时 MaskablePPO 收到的 learning_rate 是 callable。"""
+        config_manager = create_test_config_manager()
+        config_manager.get_config().model_hyperparams.lr_schedule = "cosine"
+        config_manager.get_config().model_hyperparams.lr_end = 1e-5
+
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
+            mock_ppo.return_value = Mock()
+            create_new_model(env=mock_env, config_manager=config_manager)
+            call_args = mock_ppo.call_args
+            assert callable(call_args[1]['learning_rate'])
+
+    def test_cosine_lr_start(self, mock_env):
+        """progress=1.0 時 lr == lr_start。"""
+        config_manager = create_test_config_manager()
+        config_manager.get_config().model_hyperparams.learning_rate = 1e-4
+        config_manager.get_config().model_hyperparams.lr_schedule = "cosine"
+        config_manager.get_config().model_hyperparams.lr_end = 1e-5
+
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
+            mock_ppo.return_value = Mock()
+            create_new_model(env=mock_env, config_manager=config_manager)
+            lr_fn = mock_ppo.call_args[1]['learning_rate']
+            assert abs(lr_fn(1.0) - 1e-4) < 1e-10
+
+    def test_cosine_lr_end(self, mock_env):
+        """progress=0.0 時 lr ≈ lr_end。"""
+        config_manager = create_test_config_manager()
+        config_manager.get_config().model_hyperparams.learning_rate = 1e-4
+        config_manager.get_config().model_hyperparams.lr_schedule = "cosine"
+        config_manager.get_config().model_hyperparams.lr_end = 1e-5
+
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
+            mock_ppo.return_value = Mock()
+            create_new_model(env=mock_env, config_manager=config_manager)
+            lr_fn = mock_ppo.call_args[1]['learning_rate']
+            assert abs(lr_fn(0.0) - 1e-5) < 1e-10
+
+    def test_no_lr_schedule_uses_float(self, mock_env):
+        """lr_schedule=None 时 learning_rate 是 float（向后兼容）。"""
+        config_manager = create_test_config_manager()
+        # lr_schedule defaults to None
+
+        with patch('src.factories.model_factory.MaskablePPO') as mock_ppo:
+            mock_ppo.return_value = Mock()
+            create_new_model(env=mock_env, config_manager=config_manager)
+            call_args = mock_ppo.call_args
+            lr = call_args[1]['learning_rate']
+            assert isinstance(lr, float)

@@ -1,0 +1,44 @@
+# EXP-013 揭格时进度奖励（A4b）
+# 核心思路：进度 bonus 移到安全揭格时，踩雷惩罚保持 -1.0（修复 EXP-012 的设计缺陷）
+# reward = revealed_count * reward_reveal * (1 + reward_progress_coef * safe_revealed_ratio)
+# 唯一变量（vs EXP-009）：reward_progress_coef 0.0 → 1.0
+# 对比基准：EXP-009（8×8×10 from scratch 5M = 0%）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 8
+  height: 8
+  n_mines: 10
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+  reward_progress_coef: 1.0
+
+training_execution:
+  total_timesteps: 5_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 100000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

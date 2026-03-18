@@ -27,6 +27,8 @@ class ModelHyperparams:
     n_steps: int
     batch_size: int
     n_epochs: int
+    lr_schedule: Optional[str] = None   # "cosine" | None（向后兼容）
+    lr_end: Optional[float] = None      # cosine 终点 lr
 
 
 @dataclass

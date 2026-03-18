@@ -1,5 +1,31 @@
 # 实验日志
 
+## EXP-014 学习率 Cosine 衰减 8×8×10 (2026-03-18)
+
+- **配置**：experiments/configs/exp_014_cosine_lr.yaml
+- **假设**：MaskablePPO 支持 callable 学习率；cosine 衰减（lr_start=0.0001 → lr_end=0.00001）改善后期收敛，避免固定 LR 在后期振荡
+- **唯一变量**（vs EXP-009）：`lr_schedule: "cosine"`, `lr_end: 0.00001`，其余超参完全相同（from scratch）
+- **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%）
+- **步数**：5M（from scratch）
+- **Run**：待填
+- **指标**：待填
+- **成功标准**：eval_win_rate > 2%，success_rate 曲线斜率更陡
+
+---
+
+## EXP-013 揭格时进度奖励 8×8×10 (2026-03-18)
+
+- **配置**：experiments/configs/exp_013_reveal_progress_reward.yaml
+- **假设**：修复 EXP-012 设计缺陷——进度 bonus 移到**安全揭格时**（`reward *= (1 + coef * safe_revealed_ratio)`），踩雷惩罚保持 -1.0 不变，消除"快速死"激励，同时提升高完成度的揭格奖励密度
+- **唯一变量**（vs EXP-009）：`reward_progress_coef` 0.0 → 1.0（语义完全不同于 EXP-012），其余超参完全相同（from scratch）
+- **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%），EXP-012（踩雷时进度 bonus = 0%，reward hacking）
+- **步数**：5M（from scratch）
+- **Run**：待填
+- **指标**：待填
+- **成功标准**：eval_win_rate > 5%，ep_rew_mean 不虚高（无 reward hacking）
+
+---
+
 ## EXP-012 完成进度奖励塑形 8×8×10 (2026-03-18)
 
 - **配置**：experiments/configs/exp_012_progress_reward.yaml
