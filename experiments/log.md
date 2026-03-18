@@ -19,10 +19,20 @@
 - **假设**：修复 EXP-012 设计缺陷——进度 bonus 移到**安全揭格时**（`reward *= (1 + coef * safe_revealed_ratio)`），踩雷惩罚保持 -1.0 不变，消除"快速死"激励，同时提升高完成度的揭格奖励密度
 - **唯一变量**（vs EXP-009）：`reward_progress_coef` 0.0 → 1.0（语义完全不同于 EXP-012），其余超参完全相同（from scratch）
 - **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%），EXP-012（踩雷时进度 bonus = 0%，reward hacking）
-- **步数**：5M（from scratch）
-- **Run**：待填
-- **指标**：待填
-- **成功标准**：eval_win_rate > 5%，ep_rew_mean 不虚高（无 reward hacking）
+- **步数**：3.4M（提前终止，中间结果已足够判断）
+- **Run**：mw_ppo_8x8x10_seed42_20260318102659
+- **指标 (TensorBoard @3.4M)**：见 experiments/results/exp_013_metrics.json
+- **指标 (Eval @3.4M)**：eval_win_rate = **0%**（100 局，@3.4M 最终 checkpoint）
+- **关键指标**：
+  - success_rate: 全程 0%，max 1%（与 EXP-009/012 无差异）
+  - ep_rew_mean: 2.39 → 3.75，max 4.51（**仍显著虚高**，EXP-009 约 0.8）
+  - explained_variance: max 0.50，final 0.48（低于 EXP-009 的 0.53，value 拟合更差）
+  - entropy_loss: -3.85 → -1.40（收敛节奏正常）
+- **分析**：
+  - 揭格乘数 `× (1 + coef * ratio)` 同样造成 reward hacking：模型学会多揭几格（获高乘数奖励）但无需赢——揭 10 格 × 乘数 >> 胜利奖励的期望值
+  - ep_rew_mean 虚高模式与 EXP-012 几乎相同，说明**奖励乘数和奖励加法都会导致同一问题**：只要进度信号改变了不同动作的相对价值，模型就会找到绕过"真正赢"的捷径
+  - explained_variance 进一步下降（0.48 < EXP-009 的 0.53）：进度乘数扭曲了奖励分布，value function 更难拟合
+- **结论**：揭格时进度奖励乘数**同样无效**。根本问题是任何形式的进度奖励都在隐式改变"赢"的相对激励——在 8×8×10 的稀疏环境下，模型总能找到通过最大化中间奖励而非胜利来获取更高期望回报的策略。下一步专注超参调优方向（EXP-014 cosine LR），而非继续奖励塑形。
 
 ---
 

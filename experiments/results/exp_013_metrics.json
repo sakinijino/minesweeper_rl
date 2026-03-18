@@ -1,0 +1,23 @@
+{
+  "exp_id": "exp_013",
+  "run_name": "mw_ppo_8x8x10_seed42_20260318102659",
+  "total_steps": 3407872,
+  "final_ep_rew_mean": 3.7492,
+  "max_ep_rew_mean": 4.5101,
+  "min_ep_rew_mean": 2.3419,
+  "final_success_rate": 0.0,
+  "max_success_rate": 0.01,
+  "min_success_rate": 0.0,
+  "final_explained_variance": 0.4841,
+  "max_explained_variance": 0.5026,
+  "min_explained_variance": -0.0065,
+  "final_entropy_loss": -1.4019,
+  "max_entropy_loss": -1.3548,
+  "min_entropy_loss": -3.8525,
+  "final_policy_gradient_loss": -0.03,
+  "max_policy_gradient_loss": -0.0079,
+  "min_policy_gradient_loss": -0.0326,
+  "final_value_loss": 0.4432,
+  "max_value_loss": 0.6311,
+  "min_value_loss": 0.4209
+}
