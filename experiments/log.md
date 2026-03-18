@@ -8,15 +8,26 @@
 - **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%）；EXP-007（5×5×3 @1.75M = 87%，transfer 来源）
 - **Source checkpoint**：mw_ppo_5x5x3_seed42_20260317041904，step 1750000
 - **步数**：5M（从头计数，transfer 只迁移权重，不继承 timesteps）
-- **Run**：TBD
-- **指标 (TensorBoard)**：TBD → experiments/results/exp_010_metrics.json
-- **指标 (Eval)**：TBD
-- **关键观测**：
-  - 前 1M 步 success_rate 是否 > 0%（vs EXP-009 全程 0%）
-  - 最终 eval_win_rate 是否 > 0%
-  - 学习起飞时间对比 EXP-009
-- **分析**：TBD
-- **结论**：TBD
+- **Run**：mw_ppo_8x8x10_seed42_20260317152622
+- **指标 (TensorBoard)**：见 experiments/results/exp_010_metrics.json
+- **指标 (Eval)**：eval_win_rate = **0%**（100 局，seed=42，@5M步，0/100 wins）
+- **关键指标**：
+  - success_rate: **全程 0%**，max 仅 1%（与 EXP-009 完全相同）
+  - explained_variance: -0.52 → 0.51，max 0.56（与 EXP-009 的 -0.004→0.53 几乎相同）
+  - entropy_loss: -3.85 → **-1.08**（EXP-009 降到 -1.33；EXP-010 保留了更多探索）
+  - value_loss: 0.72 → 0.45（收敛节奏正常，与 EXP-009 相近）
+  - fps: 稳定 ~1590，训练时长 ~53 分钟（3162 秒）
+- **分析**：
+  - Conv 权重迁移对 8×8×10 学习**无实质帮助**——success_rate 全程 0%，与 EXP-009（from scratch）完全一致
+  - explained_variance 轨迹几乎相同（EXP-009 max 0.57 vs EXP-010 max 0.56），说明 value function 拟合能力没有因迁移而提升
+  - 唯一差异：entropy 收敛更慢（-1.08 vs -1.33），说明策略"更困惑"——可能是 Conv 迁移权重与随机初始化的 Linear/action head 形成不一致，导致梯度更混乱
+  - 核心问题不在特征提取，而在**奖励稀疏性**本身：8×8×10 随机探索完成一局概率 ≈ 17%，5M 步内几乎不可能从偶然胜利中学习，无论是否迁移 Conv 权重
+  - Conv 层编码的是小尺度局部模式（3×3 kernel），这些模式在 5×5 和 8×8 棋盘上本质相同，但 value function（Linear）和 action head 从随机初始化开始，与迁移来的 Conv 权重存在训练不一致，可能需要更长时间才能协同
+- **结论**：仅迁移 Conv 权重的课程学习策略在 5M 步内无效。根本瓶颈是稀疏奖励，而非特征质量；单靠 Conv 层迁移无法绕过"首次胜利"的探索鸿沟。需要更根本的课程学习策略：中间棋盘尺寸过渡（5×5→6×6→7×7→8×8 逐步扩大），或奖励塑形（给予"接近胜利"的中间奖励），或更长步数（10M+）。
+- **后续规划**：
+  - **EXP-011 候选 A**：分阶段课程 5×5→6×6→8×8，每阶段 2M 步，逐步迁移
+  - **EXP-011 候选 B**：改变奖励塑形，增加"安全揭开比例"奖励降低稀疏性
+  - **EXP-011 候选 C**：大幅增加步数（10M+）续训 EXP-010，看更长训练能否突破
 
 ---
 
