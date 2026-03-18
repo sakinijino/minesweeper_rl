@@ -1,5 +1,36 @@
 # 实验日志
 
+## EXP-011 分阶段课程学习 5×5×3 → 6×6×5 → 8×8×10 (2026-03-18)
+
+### Stage 2：6×6×5 中间棋盘
+
+- **配置**：experiments/configs/exp_011a_stage2_6x6x5.yaml
+- **假设**：在 5×5→8×8 之间插入 6×6×5 中间台阶，让模型先在难度适中的棋盘上学会完整策略（Conv + Linear + action head），再将 Conv 权重迁移到 8×8 时协同性更好；6×6×5 密度 14%，随机完成率约 40%，远高于 8×8×10（17%），能提供足够的奖励信号
+- **唯一变量**（vs EXP-010）：迁移来源中间台阶 6×6×5，而非直接 5×5→8×8
+- **对比基准**：EXP-009（8×8×10 from scratch = 0%），EXP-010（直接迁移 5×5×3 Conv = 0%）
+- **Source checkpoint**：mw_ppo_5x5x3_seed42_20260317041904，step 1750000（EXP-007 最优）
+- **步数**：2M（从头计数，transfer 只迁移 Conv 权重）
+- **Run**：TBD
+- **指标 (TensorBoard)**：TBD（见 experiments/results/exp_011a_metrics.json）
+- **指标 (Eval)**：TBD（成功标准：eval_win_rate > 50%）
+- **分析**：TBD
+- **结论**：TBD
+
+### Stage 3：8×8×10 目标棋盘
+
+- **配置**：experiments/configs/exp_011b_stage3_8x8x10.yaml
+- **假设**：经过 6×6×5 完整训练的 Conv 权重与 8×8×10 的 Linear/action head 协同性更好，能突破 EXP-009/010 全程 0% 的稀疏奖励瓶颈
+- **唯一变量**（vs EXP-010）：迁移来源从 5×5×3 改为 6×6×5 最优 checkpoint
+- **Source checkpoint**：TBD（Stage 2 完成后确定，取 eval 最优的 checkpoint）
+- **步数**：5M（从头计数）
+- **Run**：TBD
+- **指标 (TensorBoard)**：TBD（见 experiments/results/exp_011b_metrics.json）
+- **指标 (Eval)**：TBD（成功标准：eval_win_rate > 0%，任何正数都是相对 EXP-009/010 的突破）
+- **分析**：TBD
+- **结论**：TBD
+
+---
+
 ## EXP-010 课程学习 5×5×3 → 8×8×10 (2026-03-17)
 
 - **配置**：experiments/configs/exp_010_curriculum_5x5_to_8x8.yaml

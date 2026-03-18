@@ -1,0 +1,44 @@
+# EXP-011 Stage 3：8×8×10 目标棋盘，5M 步（分阶段课程学习）
+# transfer_from: EXP-011 Stage 2 最优 checkpoint（训练完 Stage 2 后确定具体 run 和步数）
+# 目标：验证 5×5→6×6→8×8 分阶段课程能突破 EXP-009/010 全程 0% 的瓶颈
+# 唯一变量（vs EXP-010）：迁移来源从 5×5×3 改为 6×6×5（经过中间台阶训练的 Conv 权重）
+# 对比基准：EXP-009（8×8×10 from scratch = 0%），EXP-010（直接迁移 5×5×3 Conv = 0%）
+# 成功标准：eval_win_rate > 0%（任何正数都是相对 EXP-009/010 的突破）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 8
+  height: 8
+  n_mines: 10
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 5_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 100000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
