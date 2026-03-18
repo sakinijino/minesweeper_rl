@@ -10,18 +10,29 @@
 - **对比基准**：EXP-009（8×8×10 from scratch = 0%），EXP-010（直接迁移 5×5×3 Conv = 0%）
 - **Source checkpoint**：mw_ppo_5x5x3_seed42_20260317041904，step 1750000（EXP-007 最优）
 - **步数**：2M（从头计数，transfer 只迁移 Conv 权重）
-- **Run**：TBD
-- **指标 (TensorBoard)**：TBD（见 experiments/results/exp_011a_metrics.json）
-- **指标 (Eval)**：TBD（成功标准：eval_win_rate > 50%）
-- **分析**：TBD
-- **结论**：TBD
+- **Run**：mw_ppo_6x6x5_seed42_20260318040414
+- **指标 (TensorBoard)**：见 experiments/results/exp_011a_metrics.json
+- **指标 (Eval)**：eval_win_rate = **38%**（100 局，seed=42，@2M 步 final model）
+- **关键指标**：
+  - success_rate: 0% → 38%，max 38%（单调上升，final = max，尚未收敛）
+  - explained_variance: max 0.49，final 0.30（训练末期下降，value function 拟合退化）
+  - entropy_loss: -3.13 → -0.83（策略收敛正常）
+  - value_loss: 0.47 → 1.02（末期上升，与 explained_variance 下降吻合，可能策略快速变化导致 value 跟不上）
+  - fps: 早期 ~1600，末期 ~970（6×6 比 5×5 慢约 30%）
+- **分析**：
+  - 38% eval 说明 6×6×5 确实比 8×8×10 容易学（EXP-009/010 全程 0%），中间台阶假设成立
+  - 但未达到 50% 目标：可能原因是 6×6×5 对于 2M 步仍不够（success_rate 曲线单调上升未 plateau，说明还在学）
+  - explained_variance 末期从 0.49 下降到 0.30，value_loss 同步上升：策略在后期快速进步但 value function 滞后，说明 vf_coef=1.0 在 6×6 棋盘上也可能不够
+  - Conv 权重迁移确实起到预热作用：第 49k 步时 explained_variance 已达 0.38（EXP-009 from scratch 早期是 -0.004），说明 Conv 层的 5×5 特征对 6×6 有正迁移
+  - 最优 checkpoint = 2M final（max_success_rate = final_success_rate = 38%，无需选中间步）
+- **结论**：Stage 2 eval 38%，低于 50% 成功线，但仍有实质学习。曲线未 plateau 说明更多步数（3-4M）可能突破 50%。当前 2M final checkpoint 作为 Stage 3 的迁移来源，虽然策略质量有限，但比 5×5→8×8 直接跳（EXP-010）有更充分的 6×6 策略训练。
 
 ### Stage 3：8×8×10 目标棋盘
 
 - **配置**：experiments/configs/exp_011b_stage3_8x8x10.yaml
 - **假设**：经过 6×6×5 完整训练的 Conv 权重与 8×8×10 的 Linear/action head 协同性更好，能突破 EXP-009/010 全程 0% 的稀疏奖励瓶颈
 - **唯一变量**（vs EXP-010）：迁移来源从 5×5×3 改为 6×6×5 最优 checkpoint
-- **Source checkpoint**：TBD（Stage 2 完成后确定，取 eval 最优的 checkpoint）
+- **Source checkpoint**：mw_ppo_6x6x5_seed42_20260318040414，step 2000000（final，max_success_rate = final = 38%）
 - **步数**：5M（从头计数）
 - **Run**：TBD
 - **指标 (TensorBoard)**：TBD（见 experiments/results/exp_011b_metrics.json）
