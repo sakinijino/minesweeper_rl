@@ -7,9 +7,21 @@
 - **唯一变量**（vs EXP-009）：`reward_progress_coef` 0.0 → 1.0，其余超参完全相同（from scratch，不迁移权重）
 - **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%）
 - **步数**：5M（from scratch）
-- **Run**：（训练中）
-- **指标**：待更新
-- **成功标准**：`eval_win_rate > 5%`（vs EXP-009/010/011 全程 0-2%）
+- **Run**：mw_ppo_8x8x10_seed42_20260318083104
+- **指标 (TensorBoard)**：见 experiments/results/exp_012_metrics.json
+- **指标 (Eval)**：eval_win_rate = **0%**（100 局，seed=42，@5M 步 final model）
+- **关键指标**：
+  - success_rate: **全程 0%**，max 仅 2%（与 EXP-009/010/011b 几乎相同）
+  - ep_rew_mean: 1.68 → 2.93，max 3.33（**显著高于 EXP-009 的约 0.8**，但系虚高）
+  - explained_variance: -0.009 → 0.42，max 0.46（比 EXP-009/011b 的 0.53/0.56 更低）
+  - entropy_loss: -3.85 → -1.22（收敛节奏与前几轮相近）
+  - value_loss: 0.76 → 0.56
+- **分析**：
+  - ep_rew_mean 虚高：模型确实在最大化奖励，但学会的是靠少量 reveal（0.1×格）+ progress_bonus 的组合——eval 显示大量局只走 2-4 步即死，奖励却是正值（progress_bonus 把 -1.0 拉到 +0.5~+3.7）
+  - **奖励塑形副作用**：`reward_progress_coef=1.0` 把死亡惩罚从 -1.0 软化到最低 -0.17，**实际上降低了踩雷的代价**，让模型更愿意"随便踩一颗雷结束游戏"——因为死亡不再痛苦，而揭格奖励（少量）加上 progress_bonus 已经能给出正向回报
+  - explained_variance 0.42（低于 EXP-009/011b 的 0.53/0.56）：value function 拟合更差，说明奖励分布被 progress_bonus 扭曲，value 更难预测
+  - success_rate max 2% 与 EXP-009/010/011b 的 0-2% 无统计差异：进度奖励完全未能引导策略趋向胜利
+- **结论**：`reward_progress_coef=1.0` 的进度奖励塑形**无效甚至有害**。根本原因：踩雷惩罚被软化后，模型发现"快速死"是性价比最高的策略（少走几步，用 progress_bonus 弥补惩罚，避免更多踩雷风险）。要真正解决稀疏奖励问题，需考虑：① 保持踩雷惩罚不变，仅在安全揭格时给额外奖励（而非踩雷时给补偿）；② 课程 reward shaping（随训练进展逐渐降低 coef）；③ 完全不同的方向（HER、密度估计、更小棋盘渐进）
 
 ---
 
