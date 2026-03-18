@@ -124,6 +124,83 @@ class TestTwoChannel:
 # Step 3: observation_space shape matches actual obs
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Step 3: Progress reward shaping
+# ---------------------------------------------------------------------------
+
+class TestProgressReward:
+    def test_no_progress_reward_by_default(self):
+        """reward_progress_coef=0 时踩雷奖励等于 reward_lose。"""
+        env = MinesweeperEnv(width=5, height=5, n_mines=3, render_mode=None)
+        env.reset(seed=0)
+        # Find a mine cell and step on it (not first step)
+        safe_action = 12  # center, always safe due to first-click protection
+        env.step(safe_action)
+        # Now find a mine
+        mine_action = None
+        for idx in range(25):
+            r, c = np.unravel_index(idx, (5, 5))
+            if env.mines[r, c] and not env.revealed[r, c]:
+                mine_action = idx
+                break
+        assert mine_action is not None
+        _, reward, terminated, _, _ = env.step(mine_action)
+        assert terminated is True
+        assert reward == env.reward_lose
+
+    def test_progress_reward_on_mine_hit(self):
+        """踩雷后 reward = reward_lose + coef * (safe_revealed / total_safe)。"""
+        env = MinesweeperEnv(width=5, height=5, n_mines=3,
+                             render_mode=None, reward_progress_coef=1.0)
+        env.reset(seed=0)
+        # Reveal a safe cell first
+        safe_action = 12
+        env.step(safe_action)
+        safe_revealed = int(np.sum(env.revealed))
+        total_safe = 5 * 5 - 3
+        # Find a mine
+        mine_action = None
+        for idx in range(25):
+            r, c = np.unravel_index(idx, (5, 5))
+            if env.mines[r, c] and not env.revealed[r, c]:
+                mine_action = idx
+                break
+        assert mine_action is not None
+        _, reward, terminated, _, _ = env.step(mine_action)
+        expected = env.reward_lose + 1.0 * (safe_revealed / total_safe)
+        assert terminated is True
+        assert abs(reward - expected) < 1e-6
+
+    def test_progress_reward_greater_than_reward_lose(self):
+        """有进度奖励时，踩雷 reward > reward_lose（进度 > 0）。"""
+        env = MinesweeperEnv(width=5, height=5, n_mines=3,
+                             render_mode=None, reward_progress_coef=1.0)
+        env.reset(seed=0)
+        env.step(12)  # reveal at least one safe cell
+        mine_action = None
+        for idx in range(25):
+            r, c = np.unravel_index(idx, (5, 5))
+            if env.mines[r, c] and not env.revealed[r, c]:
+                mine_action = idx
+                break
+        assert mine_action is not None
+        _, reward, _, _, _ = env.step(mine_action)
+        assert reward > env.reward_lose
+
+    def test_win_reward_unchanged_by_progress_coef(self):
+        """胜利时 reward_progress_coef 不影响 win reward。"""
+        env_no_coef = MinesweeperEnv(width=5, height=5, n_mines=3,
+                                     render_mode=None, reward_progress_coef=0.0)
+        env_with_coef = MinesweeperEnv(width=5, height=5, n_mines=3,
+                                       render_mode=None, reward_progress_coef=1.0)
+        # The win reward itself (reward_win) should be the same
+        assert env_no_coef.reward_win == env_with_coef.reward_win
+
+
+# ---------------------------------------------------------------------------
+# Step 3 (original): observation_space shape matches actual obs
+# ---------------------------------------------------------------------------
+
 class TestObsSpaceShape:
     def test_obs_space_shape_single(self):
         env = MinesweeperEnv(width=5, height=4, n_mines=2, render_mode=None, obs_channels=1)

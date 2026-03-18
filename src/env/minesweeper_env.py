@@ -8,7 +8,8 @@ class MinesweeperEnv(gym.Env):
 
     def __init__(self, width=10, height=10, n_mines=10, render_mode='human',
                  reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1,
-                 max_reward_per_step=None, render_fps=30, obs_channels=1):
+                 max_reward_per_step=None, render_fps=30, obs_channels=1,
+                 reward_progress_coef: float = 0.0):
         super().__init__()
 
         self.width = width
@@ -33,6 +34,7 @@ class MinesweeperEnv(gym.Env):
         self.reward_reveal = reward_reveal  # 每揭开一个安全格子的奖励
         self.reward_invalid = reward_invalid  # 点击已揭开格子的惩罚
         self.max_reward_per_step = max_reward_per_step  # 单步最大奖励限制
+        self.reward_progress_coef = reward_progress_coef
         self.obs_channels = obs_channels
 
         self.observation_space = spaces.Box(
@@ -156,8 +158,11 @@ class MinesweeperEnv(gym.Env):
             # 点击已揭开的格子 -> 惩罚
             reward = self.reward_invalid
         elif self.mines[row, col]:
-            # 点击到地雷 -> 失败，大惩罚
-            reward = self.reward_lose
+            # 点击到地雷 -> 失败，大惩罚 + 完成进度奖励
+            total_safe = self.height * self.width - self.n_mines
+            safe_revealed = int(np.sum(self.revealed))  # 踩雷前已揭开的安全格
+            progress_bonus = self.reward_progress_coef * (safe_revealed / total_safe)
+            reward = self.reward_lose + progress_bonus
             self.revealed[row, col] = True
             self.board[row, col] = -1 # 标记为地雷
             self.game_over = True

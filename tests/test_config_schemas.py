@@ -204,6 +204,23 @@ class TestEnvironmentConfig:
         )
         assert env_config.obs_channels == 2
 
+    def test_environment_config_progress_coef_default(self):
+        """reward_progress_coef defaults to 0.0 (backward compatible)."""
+        config = EnvironmentConfig(
+            width=5, height=5, n_mines=3,
+            reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1
+        )
+        assert config.reward_progress_coef == 0.0
+
+    def test_environment_config_progress_coef_set(self):
+        """reward_progress_coef can be set explicitly."""
+        config = EnvironmentConfig(
+            width=5, height=5, n_mines=3,
+            reward_win=1.0, reward_lose=-1.0, reward_reveal=0.1, reward_invalid=-0.1,
+            reward_progress_coef=2.0
+        )
+        assert config.reward_progress_coef == 2.0
+
     def test_environment_validation_valid(self, sample_environment_config):
         """Test environment parameter validation with valid config."""
         assert validate_environment_config(sample_environment_config) is True

@@ -49,6 +49,7 @@ class EnvironmentConfig:
     reward_invalid: float
     max_reward_per_step: Optional[float] = None
     obs_channels: int = 1  # 1=单通道（原行为），2=双通道分离观测
+    reward_progress_coef: float = 0.0  # 完成进度奖励系数（0=关闭，向后兼容）
 
 
 @dataclass

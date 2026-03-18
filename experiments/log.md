@@ -1,5 +1,18 @@
 # 实验日志
 
+## EXP-012 完成进度奖励塑形 8×8×10 (2026-03-18)
+
+- **配置**：experiments/configs/exp_012_progress_reward.yaml
+- **假设**：踩雷时叠加进度奖励 `reward_lose + coef * (safe_revealed / total_safe)`，让模型能区分"快速死"和"接近赢"，提供梯度指引趋向高完成度策略，突破 8×8×10 的稀疏奖励瓶颈
+- **唯一变量**（vs EXP-009）：`reward_progress_coef` 0.0 → 1.0，其余超参完全相同（from scratch，不迁移权重）
+- **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%）
+- **步数**：5M（from scratch）
+- **Run**：（训练中）
+- **指标**：待更新
+- **成功标准**：`eval_win_rate > 5%`（vs EXP-009/010/011 全程 0-2%）
+
+---
+
 ## EXP-011 分阶段课程学习 5×5×3 → 6×6×5 → 8×8×10 (2026-03-18)
 
 ### Stage 2：6×6×5 中间棋盘

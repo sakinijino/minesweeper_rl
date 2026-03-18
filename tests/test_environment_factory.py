@@ -707,11 +707,34 @@ class TestEnvironmentDelayFeatures:
     def test_fps_mode_specific_values(self):
         """Test that different modes get appropriate FPS values."""
         config_manager = create_test_config_manager()
-        
+
         # Human mode should get high FPS for responsiveness
         human_config = create_env_config(config_manager=config_manager, render_mode='human')
         assert 'render_fps' in human_config
-        
+
         # Batch mode (no render_mode) should still have FPS for consistency
         batch_config = create_env_config(config_manager=config_manager)
         assert 'render_fps' in batch_config
+
+
+class TestProgressCoefPropagation:
+    """Test that reward_progress_coef is propagated through the factory."""
+
+    def test_env_config_includes_progress_coef(self):
+        """env_config dict includes reward_progress_coef key."""
+        config_manager = create_test_config_manager()
+        config = create_env_config(config_manager=config_manager)
+        assert 'reward_progress_coef' in config
+
+    def test_env_config_progress_coef_default_zero(self):
+        """reward_progress_coef defaults to 0.0 when not set in YAML."""
+        config_manager = create_test_config_manager()
+        config = create_env_config(config_manager=config_manager)
+        assert config['reward_progress_coef'] == 0.0
+
+    def test_env_config_passes_nonzero_progress_coef(self):
+        """When EnvironmentConfig.reward_progress_coef=1.0, factory passes it through."""
+        config_manager = create_test_config_manager()
+        config_manager.get_config().environment_config.reward_progress_coef = 1.0
+        config = create_env_config(config_manager=config_manager)
+        assert config['reward_progress_coef'] == 1.0
