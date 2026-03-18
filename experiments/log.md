@@ -3,8 +3,8 @@
 ## EXP-014 学习率 Cosine 衰减 8×8×10 (2026-03-18)
 
 - **配置**：experiments/configs/exp_014_cosine_lr.yaml
-- **假设**：MaskablePPO 支持 callable 学习率；cosine 衰减（lr_start=0.0001 → lr_end=0.00001）改善后期收敛，避免固定 LR 在后期振荡
-- **唯一变量**（vs EXP-009）：`lr_schedule: "cosine"`, `lr_end: 0.00001`，其余超参完全相同（from scratch）
+- **假设**：先用高 LR（0.001，10× EXP-009）快速探索奖励空间，cosine 衰减到 0.0001（EXP-009 基准值）精细收敛，避免固定小 LR 初期学不动的问题
+- **唯一变量**（vs EXP-009）：`lr_schedule: "cosine"`, `learning_rate: 0.001`, `lr_end: 0.0001`，其余超参完全相同（from scratch）
 - **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%）
 - **步数**：5M（from scratch）
 - **Run**：待填
