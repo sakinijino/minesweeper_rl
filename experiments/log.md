@@ -7,9 +7,18 @@
 - **唯一变量**（vs EXP-009）：`lr_schedule: "cosine"`, `learning_rate: 0.001`, `lr_end: 0.0001`，其余超参完全相同（from scratch）
 - **对比基准**：EXP-009（8×8×10 from scratch 5M = 0%）
 - **步数**：5M（from scratch）
-- **Run**：待填
-- **指标**：待填
-- **成功标准**：eval_win_rate > 2%，success_rate 曲线斜率更陡
+- **Run**：mw_ppo_8x8x10_seed42_20260318115101
+- **指标 (TensorBoard @5M)**：见 experiments/results/exp_014_metrics.json
+- **指标 (Eval)**：无法加载（lambda 闭包序列化 bug，已修复但本次 checkpoint 无法复用）
+- **关键指标**：
+  - success_rate: 全程 0%，max 1%（与 EXP-009 无差异）
+  - ep_rew_mean: 1.26 → 2.09，max 2.58（略高于 EXP-009 的 ~0.8，无明显 hacking）
+  - explained_variance: max 0.55，final 0.52（与 EXP-009 的 0.53 几乎相同）
+  - entropy_loss: -3.84 → -1.08（正常收敛）
+  - policy_gradient_loss: 早期波动更大（min -0.062），说明高 LR 确实产生了更大更新，但无效
+- **Bug 发现**：lambda 闭包捕获 `math` module 导致 pickle 序列化失败，load 时报 `'module' object is not callable`；已修复为 `from math import cos, pi`
+- **分析**：高 LR（0.001）早期产生更大梯度更新，但 success_rate 全程 0%，说明 8×8×10 的瓶颈不是探索量或 LR schedule 问题，而是稀疏奖励本身——模型根本得不到足够的胜利信号来学习策略，无论 LR 多高都无法突破
+- **结论**：cosine LR schedule（高→低）对 8×8×10 无效。超参调优方向（B1）已排除。稀疏奖励瓶颈需要从根本上改变奖励密度（如更小棋盘渐进 A5）或算法层面改进（如 HER、ICM 内在激励）。
 
 ---
 

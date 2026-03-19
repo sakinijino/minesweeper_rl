@@ -7,8 +7,8 @@ code duplication between train.py and play.py.
 """
 
 import io
-import math
 import os
+from math import cos, pi
 import zipfile
 from typing import Dict, List, Optional, Tuple, Union, Any
 
@@ -107,7 +107,7 @@ def create_new_model(
     if model_hyperparams.lr_schedule == "cosine" and model_hyperparams.lr_end is not None:
         lr_start = model_hyperparams.learning_rate
         lr_end = model_hyperparams.lr_end
-        learning_rate = lambda p: lr_end + 0.5 * (lr_start - lr_end) * (1 + math.cos(math.pi * (1 - p)))
+        learning_rate = lambda p: lr_end + 0.5 * (lr_start - lr_end) * (1 + cos(pi * (1 - p)))
     else:
         learning_rate = model_hyperparams.learning_rate
 
