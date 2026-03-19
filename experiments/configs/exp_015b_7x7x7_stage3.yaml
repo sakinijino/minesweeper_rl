@@ -6,7 +6,7 @@
 # 成功标准：eval_win_rate ≥ 40%，曲线 plateau 后转移至 015c
 # 步数：3.5M（新棋盘从头计数，迁移 Conv 权重）
 
-continue_from: TBD  # 填入 EXP-015a 的 run 路径（运行后更新）
+continue_from: mw_ppo_6x6x5_seed42_20260318040414_continue_20260319064320
 
 model_hyperparams:
   learning_rate: 0.0001

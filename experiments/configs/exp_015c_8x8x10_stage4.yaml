@@ -5,7 +5,7 @@
 # 成功标准：eval_win_rate > 5%（显著超过 EXP-011b 的 1%）
 # 步数：6M（新棋盘从头计数，迁移 Conv 权重）
 
-continue_from: TBD  # 填入 EXP-015b 的 run 路径（运行后更新）
+continue_from: mw_ppo_7x7x7_seed42_20260319072120
 
 model_hyperparams:
   learning_rate: 0.0001
