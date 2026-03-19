@@ -1,0 +1,46 @@
+# EXP-015a：6×6×5 续训收敛（从 EXP-011a checkpoint 继续）
+# transfer_from: EXP-011a @2M (mw_ppo_6x6x5_seed42_20260318040414, step 2000000)
+# 目标：让 6×6×5 充分收敛（win rate ≥ 60%，曲线 plateau），作为 EXP-015b 迁移来源
+# 诊断：EXP-011a 只训练 2M 步，win rate 38%，曲线尚未 plateau——基础太弱直接迁移导致 EXP-011b 失败
+# 唯一变量（vs EXP-011a）：步数 2M → 累计 5M（再续训 3M 步）
+# 成功标准：eval_win_rate ≥ 60%，success_rate 曲线 plateau
+
+continue_from: training_runs/mw_ppo_6x6x5_seed42_20260318040414
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 6
+  height: 6
+  n_mines: 5
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 3_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

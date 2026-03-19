@@ -1,5 +1,36 @@
 # 实验日志
 
+## EXP-015c 8×8×10 第四阶段 (2026-03-19)
+
+- **配置**：experiments/configs/exp_015c_8x8x10_stage4.yaml
+- **Run**：TBD
+- **Source**：EXP-015b checkpoint（7×7×7 充分收敛后）
+- **步数**：6M（新棋盘从头计数，迁移 Conv 权重）
+- **目标**：eval_win_rate > 5%（显著超过 EXP-011b 的 1%）
+
+---
+
+## EXP-015b 7×7×7 中间台阶 (2026-03-19)
+
+- **配置**：experiments/configs/exp_015b_7x7x7_stage3.yaml
+- **Run**：TBD
+- **Source**：EXP-015a checkpoint（6×6×5 充分收敛后）
+- **步数**：3.5M（新棋盘从头计数，迁移 Conv 权重）
+- **目标**：eval_win_rate ≥ 40%，曲线 plateau 后转移至 015c
+
+---
+
+## EXP-015a 6×6×5 续训收敛 (2026-03-19)
+
+- **配置**：experiments/configs/exp_015a_6x6x5_continue.yaml
+- **Run**：TBD
+- **Source**：EXP-011a checkpoint（mw_ppo_6x6x5_seed42_20260318040414 @2M）
+- **步数**：再续训 3M 步（累计约 5M 步在 6×6×5 上）
+- **目标**：eval_win_rate ≥ 60%，success_rate 曲线 plateau 后转移至 015b
+- **背景**：EXP-011b 失败根因——EXP-011a 只训 2M 步、win rate 38%，曲线未 plateau 就转移；且从 6×6(38%) 直接跳 8×8，跨度过大
+
+---
+
 ## EXP-014 学习率 Cosine 衰减 8×8×10 (2026-03-18)
 
 - **配置**：experiments/configs/exp_014_cosine_lr.yaml

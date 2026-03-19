@@ -1,0 +1,46 @@
+# EXP-015c：8×8×10 第四阶段（最终目标棋盘）
+# transfer_from: EXP-015b checkpoint（7×7×7 充分收敛后）
+# 目标：通过更渐进的课程路径（5×5→6×6→7×7→8×8）突破 EXP-011b 的 1% 瓶颈
+# 背景：EXP-011b 直接从 6×6×5(38%) 跳 8×8×10，跨度过大；本次增加 7×7 中间台阶
+# 成功标准：eval_win_rate > 5%（显著超过 EXP-011b 的 1%）
+# 步数：6M（新棋盘从头计数，迁移 Conv 权重）
+
+continue_from: TBD  # 填入 EXP-015b 的 run 路径（运行后更新）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 8
+  height: 8
+  n_mines: 10
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 6_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 100000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

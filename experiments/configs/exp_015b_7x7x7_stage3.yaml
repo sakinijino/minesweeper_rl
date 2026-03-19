@@ -1,0 +1,47 @@
+# EXP-015b：7×7×7 中间台阶（新增渐进阶段）
+# transfer_from: EXP-015a checkpoint（6×6×5 充分收敛后）
+# 目标：在 6×6 和 8×8 之间增加 7×7 台阶，降低难度跳跃幅度
+# 背景：EXP-011b 失败原因之一是 6×6（38%）直接跳 8×8，跨度过大
+# 密度递进：5×5×3(12%) → 6×6×5(13.9%) → 7×7×7(14.3%) → 8×8×10(15.6%)
+# 成功标准：eval_win_rate ≥ 40%，曲线 plateau 后转移至 015c
+# 步数：3.5M（新棋盘从头计数，迁移 Conv 权重）
+
+continue_from: TBD  # 填入 EXP-015a 的 run 路径（运行后更新）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 7
+  height: 7
+  n_mines: 7
+  reward_win: 1.0
+  reward_lose: -1.0
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 3_500_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
