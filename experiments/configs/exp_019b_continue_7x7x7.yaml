@@ -1,0 +1,42 @@
+# EXP-019b 续训：7×7×7 跑到收敛极限
+# 从 5M 步继续，累计目标 10M，观察 plateau 和真实上限
+# continue_from: mw_ppo_7x7x7_seed42_20260320100042（5M final，eval ~27-35%）
+# 目的：019b 在 5M 步仍未 plateau（success_rate 持续上升），探索 7×7×7 真实上限
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 7
+  height: 7
+  n_mines: 7
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 10_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

@@ -23,11 +23,13 @@
 - **source**：mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707 @ step 8,263,504（eval 77%，最优 checkpoint）
 - **迁移方式**：`TRANSFER_FROM` + `TRANSFER_STEPS=8263504`，Transferred 25 layers，Skipped 5 layers（正常）
 - **唯一变量**（vs EXP-015b）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-019a 最优 checkpoint
-- **指标 (TensorBoard)**：待填入
-- **指标 (Eval)**：待填入
+- **最优 checkpoint**：step 4,500,000，eval **27%**（500 局）
+- **指标 (TensorBoard)**：success_rate final 29% / max 29%，EV 0.62，entropy_loss -0.78，value_loss 0.37
+- **指标 (Eval)**：eval_win_rate = **27%**（step 4,500,000，500 局）；final model 31.67%（300 局，方差较大）
+- **对比 EXP-015b**：±1.0 配置 eval 16%；本实验 **+11%**，提升显著但未达 40% 成功标准
 - **成功标准**：eval_win_rate ≥ 40%，曲线 plateau 后转移至 019c
-- **分析**：待填入
-- **结论**：待填入
+- **分析**：小幅 reward 在 7×7×7 上确有改善（16%→27%），EV 0.62 正常拟合。success_rate 整个训练过程持续上升（0→29%），未见明显 plateau，说明 5M 步可能不够充分。eval 结果方差较大（同一 checkpoint 200 局 35%、300 局 38%、500 局 27%），7×7×7 随机性高、样本量影响大。决策：虽未达 40% 门槛，但相比 Exp-015b 有明显改善且曲线仍上升，推进至 019c 观察 8×8×10 是否能学到任何东西。
+- **结论**：⚠️ 未完全达成目标（27% < 40%），但相对 EXP-015b（16%）改善 +11%。正迁移效果确认，继续推进 019c。最优 ckpt step 4,500,000 作为 EXP-019c source。
 
 ---
 

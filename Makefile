@@ -24,6 +24,8 @@ EXP_ID         ?=
 CONTINUE_FROM  ?=
 TRANSFER_FROM  ?=
 TRANSFER_STEPS ?=
+GAMES          ?= 100
+CKPT_STEPS     ?=
 
 # Activate venv if it exists (use . instead of source for /bin/sh compatibility)
 VENV_ACTIVATE = $(if $(wildcard .venv/bin/activate),. .venv/bin/activate &&,)
@@ -52,10 +54,12 @@ analyze:
 		$(if $(RUN),$(RUN),) \
 		$(if $(EXP_ID),--exp-id $(EXP_ID),)
 
-## eval: Batch evaluate RUN (100 episodes) — clean win rate for experiment comparison
+## eval: Batch evaluate RUN — clean win rate for experiment comparison
+##        GAMES=500 CKPT_STEPS=4500000 to customize episodes and checkpoint
 eval:
-	$(PYTHON) play.py --mode batch --num_episodes 100 \
-		$(if $(RUN),--model_dir training_runs/$(RUN),--training_run_dir training_runs/)
+	$(PYTHON) play.py --mode batch --num_episodes $(GAMES) \
+		$(if $(RUN),--model_dir training_runs/$(RUN),--training_run_dir training_runs/) \
+		$(if $(CKPT_STEPS),--checkpoint_steps $(CKPT_STEPS),)
 
 ## play: Watch agent play with visualization
 play:
