@@ -1,0 +1,47 @@
+# EXP-019a：A6 课程学习 Stage2 —— 6×6×5（EXP-018 reward 配置）
+# transfer_from: EXP-018 checkpoint（5×5×3，EV=0.84，eval 85.6%）
+# 目标：验证 win=0.1/lose=-0.1 配置在 6×6×5 上的迁移效果（EXP-015a 用±1.0 达 65%，预期更高）
+# 核心假设：正确 reward 配置（小幅对称）+ 课程学习路径的结合
+# 成功标准：eval_win_rate ≥ 70%，曲线 plateau 后转移至 019b
+# 步数：5M（新棋盘从头计数，迁移 Conv 权重）
+# 唯一变量（vs EXP-015a）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-018
+
+continue_from: mw_ppo_5x5x3_seed42_20260320034128
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 6
+  height: 6
+  n_mines: 5
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 5_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

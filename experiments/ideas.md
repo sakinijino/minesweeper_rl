@@ -25,11 +25,11 @@
 
 **EXP-018 之后的核心方向**：
 
-- [ ] **A6. 用 EXP-018 reward 重跑完整课程学习**：所有课程实验均使用 win/lose=±1.0，从未用小幅奖励试过。用 EXP-018（win=0.1/lose=-0.1）配置重跑 5×5→6×6→7×7→8×8，验证 EV=0.84 能否让 policy 在大棋盘持续学习。
+- [~] **A6. 用 EXP-018 reward 重跑完整课程学习**（EXP-019a/b/c）：所有课程实验均使用 win/lose=±1.0，从未用小幅奖励试过。用 EXP-018（win=0.1/lose=-0.1）配置重跑 5×5→6×6→7×7→8×8，验证 EV=0.84 能否让 policy 在大棋盘持续学习。
   - 起点：EXP-018 checkpoint（5×5×3，EV=0.84）
-  - Stage 6×6×5：目标 75%+（EXP-015a 用±1.0 已达 65%，正确奖励应更高）
-  - Stage 7×7×7：目标 40%+（EXP-015b 用±1.0 仅 16%，预计明显改善）
-  - Stage 8×8×10：观察 success_rate 是否出现上升趋势（突破 2% 即有价值）
+  - Stage 6×6×5（EXP-019a）：目标 70%+（EXP-015a 用±1.0 已达 65%，正确奖励应更高）
+  - Stage 7×7×7（EXP-019b）：目标 40%+（EXP-015b 用±1.0 仅 16%，预计明显改善）
+  - Stage 8×8×10（EXP-019c）：观察 success_rate 是否出现上升趋势（突破 2% 即有价值）
   - **优先级最高**：是目前最自然的下一步，直接结合已知有效的两个要素
 
 - [ ] **A7. 内在动机探索奖励（curiosity / RND）**：8×8×10 的 win signal 极稀疏（随机探索赢率 <1%），per-step reveal 奖励密度不足且引发 hacking。RND（Random Network Distillation）或 ICM（Intrinsic Curiosity Module）提供基于状态新颖性的密集信号，不依赖任务奖励，从根源解决探索问题。

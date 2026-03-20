@@ -1,5 +1,50 @@
 # 实验日志
 
+## EXP-019c A6 课程学习 Stage4 —— 8×8×10（EXP-018 reward 配置）(2026-03-20)
+
+- **配置**：experiments/configs/exp_019c_a6_curriculum_8x8x10.yaml
+- **Run**：待填入
+- **步数**：8M（新棋盘从头计数，迁移 Conv 权重）
+- **source**：EXP-019b 最优 checkpoint（7×7×7，待填入）
+- **唯一变量**（vs EXP-015c）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-019b
+- **指标 (TensorBoard)**：待填入
+- **指标 (Eval)**：待填入
+- **成功标准**：success_rate 持续 >2%（任何有意义的上升趋势均有价值）
+- **分析**：待填入
+- **结论**：待填入
+
+---
+
+## EXP-019b A6 课程学习 Stage3 —— 7×7×7（EXP-018 reward 配置）(2026-03-20)
+
+- **配置**：experiments/configs/exp_019b_a6_curriculum_7x7x7.yaml
+- **Run**：待填入
+- **步数**：5M（新棋盘从头计数，迁移 Conv 权重）
+- **source**：EXP-019a 最优 checkpoint（6×6×5，待填入）
+- **唯一变量**（vs EXP-015b）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-019a
+- **指标 (TensorBoard)**：待填入
+- **指标 (Eval)**：待填入
+- **成功标准**：eval_win_rate ≥ 40%，曲线 plateau 后转移至 019c
+- **分析**：待填入
+- **结论**：待填入
+
+---
+
+## EXP-019a A6 课程学习 Stage2 —— 6×6×5（EXP-018 reward 配置）(2026-03-20)
+
+- **配置**：experiments/configs/exp_019a_a6_curriculum_6x6x5.yaml
+- **Run**：待填入
+- **步数**：5M（新棋盘从头计数，迁移 Conv 权重）
+- **source**：mw_ppo_5x5x3_seed42_20260320034128（EXP-018，5×5×3，EV=0.84，eval 85.6%）
+- **唯一变量**（vs EXP-015a）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-018
+- **指标 (TensorBoard)**：待填入
+- **指标 (Eval)**：待填入
+- **成功标准**：eval_win_rate ≥ 70%，曲线 plateau 后转移至 019b
+- **分析**：待填入
+- **结论**：待填入
+
+---
+
 ## 终止奖励幅度对 policy 质量的影响——三种 reward 哲学对比（EXP-016/017/018）(2026-03-20)
 
 **背景**：EXP-007（win=1.0/lose=-1.0）的 explained_variance 长期卡在 0.43，怀疑是终止信号幅度过大导致 value function 方差过高、拟合困难。设计三组对照实验，在保持其他超参不变的条件下，将 win/lose 幅度缩小至 reveal（0.1）量级，同时对比三种不同的奖惩哲学：

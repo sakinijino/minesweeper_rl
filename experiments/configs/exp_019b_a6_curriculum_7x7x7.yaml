@@ -1,0 +1,46 @@
+# EXP-019b：A6 课程学习 Stage3 —— 7×7×7（EXP-018 reward 配置）
+# transfer_from: EXP-019a 最优 checkpoint（6×6×5 充分收敛后）
+# 目标：验证小幅 reward 在 7×7×7 的提升（EXP-015b 用±1.0 仅 16%，预期明显改善）
+# 成功标准：eval_win_rate ≥ 40%，曲线 plateau 后转移至 019c
+# 步数：5M（新棋盘从头计数，迁移 Conv 权重）
+# 唯一变量（vs EXP-015b）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-019a
+
+continue_from: # TODO: 019a 完成后填入实际 run 名（如 mw_ppo_6x6x5_seed42_XXXXXXXXXX）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 7
+  height: 7
+  n_mines: 7
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 5_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
