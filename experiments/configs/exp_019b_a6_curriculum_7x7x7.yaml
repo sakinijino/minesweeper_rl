@@ -5,7 +5,7 @@
 # 步数：5M（新棋盘从头计数，迁移 Conv 权重）
 # 唯一变量（vs EXP-015b）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-019a
 
-continue_from: # TODO: 019a 完成后填入实际 run 名（如 mw_ppo_6x6x5_seed42_XXXXXXXXXX）
+continue_from: # mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707 @ step 8263504（eval 77%，最优 checkpoint）
 
 model_hyperparams:
   learning_rate: 0.0001

@@ -18,10 +18,11 @@
 ## EXP-019b A6 课程学习 Stage3 —— 7×7×7（EXP-018 reward 配置）(2026-03-20)
 
 - **配置**：experiments/configs/exp_019b_a6_curriculum_7x7x7.yaml
-- **Run**：待填入
+- **Run**：mw_ppo_7x7x7_seed42_20260320100042
 - **步数**：5M（新棋盘从头计数，迁移 Conv 权重）
-- **source**：EXP-019a 最优 checkpoint（6×6×5，待填入）
-- **唯一变量**（vs EXP-015b）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-019a
+- **source**：mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707 @ step 8,263,504（eval 77%，最优 checkpoint）
+- **迁移方式**：`TRANSFER_FROM` + `TRANSFER_STEPS=8263504`，Transferred 25 layers，Skipped 5 layers（正常）
+- **唯一变量**（vs EXP-015b）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-019a 最优 checkpoint
 - **指标 (TensorBoard)**：待填入
 - **指标 (Eval)**：待填入
 - **成功标准**：eval_win_rate ≥ 40%，曲线 plateau 后转移至 019c
@@ -33,15 +34,17 @@
 ## EXP-019a A6 课程学习 Stage2 —— 6×6×5（EXP-018 reward 配置）(2026-03-20)
 
 - **配置**：experiments/configs/exp_019a_a6_curriculum_6x6x5.yaml
-- **Run**：待填入
-- **步数**：5M（新棋盘从头计数，迁移 Conv 权重）
+- **Run**：mw_ppo_6x6x5_seed42_20260320072443（5M）+ mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707（续训至 8.6M）
+- **最优 checkpoint**：step 8,263,504，eval **77%**（300 局）
 - **source**：mw_ppo_5x5x3_seed42_20260320034128（EXP-018，5×5×3，EV=0.84，eval 85.6%）
+- **迁移方式**：`TRANSFER_FROM` CLI 参数（YAML 的 `continue_from` 字段仅作文档用途，不被 config 系统读取，必须通过 Makefile 传入）
+- **权重迁移日志**：Transferred 25 layers，Skipped 5 layers（shape mismatch，棋盘尺寸变化正常）
 - **唯一变量**（vs EXP-015a）：reward_win 1.0→0.1，reward_lose -1.0→-0.1，source 改为 EXP-018
-- **指标 (TensorBoard)**：待填入
-- **指标 (Eval)**：待填入
-- **成功标准**：eval_win_rate ≥ 70%，曲线 plateau 后转移至 019b
-- **分析**：待填入
-- **结论**：待填入
+- **指标 (TensorBoard @8.6M)**：success_rate final 74% / max 80%，EV 0.72，value_loss 0.384
+- **指标 (Eval)**：eval_win_rate = **77%**（step 8,263,504，300 局）；final model 76%（300 局）
+- **对比 EXP-015a**：±1.0 配置 5M 步 eval 65%；本实验 8.6M 步 eval 77%，+12%
+- **分析**：小幅 reward（win=0.1/lose=-0.1）配合 EXP-018 迁移在 6×6×5 上显著提升，EV 稳定在 0.70~0.74，无 EV 卡死问题。5M 步时 eval 68%（未达 70% 门槛），续训后最优 checkpoint eval 77%，超过门槛。曲线在 8M 附近趋于 plateau，继续训练收益边际递减。
+- **结论**：✅ 达成目标（eval 77% > 70%）。最优 checkpoint（8,263,504 步，77%）作为 EXP-019b source。正迁移效果明显验证，A6 阶段假设成立。
 
 ---
 

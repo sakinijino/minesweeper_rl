@@ -1,0 +1,41 @@
+# EXP-019a 续训：6×6×5 跑到收敛极限
+# 从 5M 步继续，再跑 3M（累计 8M）观察 plateau
+# continue_from: mw_ppo_6x6x5_seed42_20260320072443（5M final，eval 68%）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 6
+  height: 6
+  n_mines: 5
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 8_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
