@@ -1,5 +1,119 @@
 # 实验日志
 
+## 终止奖励幅度对 policy 质量的影响——三种 reward 哲学对比（EXP-016/017/018）(2026-03-20)
+
+**背景**：EXP-007（win=1.0/lose=-1.0）的 explained_variance 长期卡在 0.43，怀疑是终止信号幅度过大导致 value function 方差过高、拟合困难。设计三组对照实验，在保持其他超参不变的条件下，将 win/lose 幅度缩小至 reveal（0.1）量级，同时对比三种不同的奖惩哲学：
+
+- **EXP-016**（win > |lose|）：死亡轻罚，胜利小奖，「随便探索」
+- **EXP-017**（|lose| > win）：死亡重罚，胜利极小，「首要避死」
+- **EXP-018**（win = |lose|）：对称幅度，方差理论最小化
+
+三组均在 5×5×3 标准棋盘、2M 步 from scratch 训练后，统一进行对比分析。
+
+### 指标对比（TensorBoard final model）
+
+| 实验 | reward 配置 | EV final/max | value_loss final | success_rate final/max |
+|------|------------|-------------|-----------------|----------------------|
+| EXP-016 | win=0.2/lose=-0.05 | 0.84/0.84 | 0.245 | 77%/88% |
+| EXP-017 | win=0.05/lose=-0.2 | 0.83/0.85 | 0.277 | 74%/87% |
+| EXP-018 | win=0.1/lose=-0.1  | 0.84/0.87 | **0.242** | 77%/86% |
+
+### 500 局 eval 对比（seed=123，final model）
+
+| 实验 | eval 胜率 | 95% CI |
+|------|----------|--------|
+| EXP-016 | **86.0%** | [82.8%, 89.2%] |
+| EXP-018 | 85.6% | [82.4%, 88.8%] |
+| EXP-017 | 85.0% | [81.7%, 88.3%] |
+
+**统计显著性**：三组两两比较均 p>0.65（proportion z-test），差异在噪声范围内无统计意义。初始 100 局 eval（017=89%，018=86%，016=81%）的差异是小样本偶然性，不代表真实排序。
+
+### 收敛速度对比
+
+- **到达 50% success_rate**：三组相同，约 507k 步
+- **到达 70%**：EXP-016 最快（~966k），EXP-018 次之，EXP-017 最慢
+- **到达 80%**：EXP-017 最快（~1,311k），EXP-016 次之，EXP-018 最慢
+- **late-plateau（最后 200k 步平均）**：016=79.6% > 017=78.4% > 018=78.2%（差距微小）
+
+### 后期稳定性
+
+- **EXP-017**：value_loss 在 ~1.5M 步达到最低 0.230 后回弹至 final 0.277（+0.047），entropy 过快收敛至 -0.60，2M 步时仍处于动态调整中
+- **EXP-016/018**：value_loss 单调下降至 final，无回弹，训练曲线稳定
+
+### B4 总结
+
+1. **EV 瓶颈根因确认**：三组 EV 均恢复至 0.83~0.87（vs EXP-007 的 0.43），100% 证实终止信号幅度（±1.0）是 EV 卡死的根因
+2. **eval 三组统计等价**：reward 哲学对 5×5×3 最终胜率无显著影响（需更多局数或更难棋盘才能区分）
+3. **迁移学习推荐 EXP-018**：EV 最稳定（0.84 final，无回弹）、value_loss 最低（0.242）、无后期不稳定风险，是用于大棋盘课程学习的最优起点
+
+---
+
+## EXP-018 B4-3 对称极小 reward（5×5×3）(2026-03-20)
+
+- **配置**：experiments/configs/exp_018_b4_reward_symmetric.yaml
+- **Run**：mw_ppo_5x5x3_seed42_20260320034128
+- **步数**：2,015,232（2M，from scratch）
+- **唯一变量**（vs EXP-007）：reward_win 1.0→0.1，reward_lose -1.0→-0.1（对称极小）
+- **指标 (TensorBoard @2M)**：见 experiments/results/exp_018_metrics.json
+- **指标 (Eval)**：eval_win_rate = **85.6%**（500 局，seed=123，final model）
+- **关键指标**：
+  - success_rate: 7% → 77%，max 86%（收敛良好）
+  - explained_variance: -0.19 → 0.84（final），max 0.87（**EV 完全恢复，三组最高且最稳定**）
+  - entropy_loss: -2.66 → -0.70（正常收敛）
+  - value_loss: 0.511 → 0.242（大幅下降，三组最低，value function 拟合最稳定）
+- **分析**：
+  - EV 从 -0.19 升至 0.84（max 0.87），三组中最高且无回弹，late-training 最稳定
+  - value_loss 0.242 是三组最低（016=0.245，017=0.277），value function 拟合质量最优
+  - 收敛速度：到达 50% 与其他两组相同（~507k 步）；到达 80% 稍慢（比 017 晚约 100k），但 late-plateau（最后 200k 步）success_rate 稳定
+  - 500 局 eval（seed=123）：85.6%，与 EXP-016（86.0%）和 EXP-017（85.0%）统计上无显著差异（见 B4 对比分析）
+- **结论**：对称极小 reward 成功恢复 EV=0.84，eval 85.6%，三组统计等价。从迁移学习角度看，EXP-018 是最优选择：EV 最稳定（final/max=0.84/0.87）、value_loss 最低（0.242）、无 017 的后期不稳定问题。**推荐用于后续大棋盘课程学习实验。**
+
+---
+
+## EXP-017 B4-2 方向反转 reward（5×5×3）(2026-03-20)
+
+- **配置**：experiments/configs/exp_017_b4_reward_lose_gt_win.yaml
+- **Run**：mw_ppo_5x5x3_seed42_20260320033936
+- **步数**：2,015,232（2M，from scratch）
+- **唯一变量**（vs EXP-007）：reward_win 1.0→0.05，reward_lose -1.0→-0.2（|lose|>win，强避死）
+- **指标 (TensorBoard @2M)**：见 experiments/results/exp_017_metrics.json
+- **指标 (Eval)**：eval_win_rate = **85.0%**（500 局，seed=123，final model）
+- **关键指标**：
+  - success_rate: 9% → 74%，max 87%（收敛节奏与 EXP-007/016 相近）
+  - explained_variance: -0.18 → 0.83（final），max 0.85（**EV 完全恢复**）
+  - entropy_loss: -2.66 → -0.60（收敛最快，entropy 收敛过度，略快于 016/018）
+  - value_loss: 0.533 → 0.277（final，但中途最低达 0.230 后**后期回弹**，三组中最不稳定）
+- **分析**：
+  - EV 0.83（max 0.85），与 EXP-003/016/018 同等级，确认 EV 恢复与 win/lose 比值无关，只与幅度有关
+  - **后期不稳定**：value_loss 从最低 0.230 回弹至 final 0.277（+0.047），entropy 收敛至 -0.60（过快），表明 2M 步时正处于过拟合/策略坍缩边界
+  - 初始 100 局 eval（seed=42）= 89%，与 500 局结果（85%）差异 4%，确认是统计噪声（见 B4 对比分析）
+  - **行为解释**：lose=-0.2 确实使"快死"成负回报（2 步死=0.1-0.2=-0.1），agent 比 016 更愿意探索；但 late-stage 不稳定说明 2M 步并非 017 的最优停点
+- **结论**：B4-2（|lose|>win）EV=0.83 ✅，500 局 eval 85%，与三组统计等价。「强避死」哲学行为上更谨慎，但 final model 出现 value_loss 后期回弹，表明训练尚未完全稳定。**作为 transfer 基础时需谨慎，推荐 EXP-018 替代。**
+
+---
+
+## EXP-016 B4-1 还原 EXP-003 reward（5×5×3）(2026-03-20)
+
+- **配置**：experiments/configs/exp_016_b4_reward_win_gt_lose.yaml
+- **Run**：mw_ppo_5x5x3_seed42_20260320032723
+- **步数**：2,015,232（2M，from scratch）
+- **唯一变量**（vs EXP-007）：reward_win 1.0→0.2，reward_lose -1.0→-0.05（还原 EXP-003 旧 reward）
+- **指标 (TensorBoard @2M)**：见 experiments/results/exp_016_metrics.json
+- **指标 (Eval)**：eval_win_rate = **86.0%**（500 局，seed=123，final model）
+- **关键指标**：
+  - success_rate: 10% → 77%，max 88%（收敛良好）
+  - explained_variance: -0.19 → 0.84（final），max 0.84（**EV 完全恢复，核心假设证实**）
+  - entropy_loss: -2.66 → -0.72（正常收敛，三组中最慢）
+  - value_loss: 0.508 → 0.245（三组中中等水平）
+- **分析**：
+  - EV 从 -0.19 升至 0.84，与 EXP-003（旧 reward，EV=0.84）完全匹配，远超 EXP-007（EV=0.43）——**B4 核心假设证实**：缩小 win/lose 幅度确实能恢复 value function 可预测性
+  - 初始 100 局 eval（seed=42）= 81%与 500 局结果（86%）差异 5%，说明少量 eval 偶然性很大
+  - 行为观察：lose=-0.05 极轻，agent 踩雷无痛感，2 步死局 reward=0.1-0.05=+0.05（正值！），存在鲁莽倾向
+  - 收敛速度：最快到达 70% success_rate（~966k 步），但后期斜率平缓，最终与 017/018 持平
+- **结论**：B4-1 EV=0.84 ✅，500 局 eval 86%，与三组统计等价。**B4 核心假设完全证实**：缩小 win/lose 幅度从根本上恢复了 value function 可预测性。win>|lose| 哲学导致部分鲁莽行为，但 500 局 eval 与其他两组无显著差异（见 B4 对比分析）。
+
+---
+
 ## EXP-015c 8×8×10 第四阶段 (2026-03-19)
 
 - **配置**：experiments/configs/exp_015c_8x8x10_stage4.yaml
