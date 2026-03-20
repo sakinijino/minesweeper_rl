@@ -1,0 +1,45 @@
+# EXP-017 B4-2 reward 重标定：|lose| > win（方向反转）
+# 假设：死亡惩罚大于胜利奖励（lose=-0.2, win=0.05）能保持低 EV 方差，
+#       同时让 agent 优先"避死"，行为更谨慎
+# 唯一变量（vs EXP-007）：reward_win 1.0→0.05，reward_lose -1.0→-0.2
+# 对比基准：EXP-007（win=1.0/lose=-1.0 @2M = 87%，EV=0.43）
+#           EXP-016（win=0.2/lose=-0.05，B4-1）
+# 成功标准：explained_variance ≥ 0.7，eval_win_rate ≥ 85%
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.05
+  reward_lose: -0.2
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 2_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

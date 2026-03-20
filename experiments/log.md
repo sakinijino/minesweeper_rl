@@ -3,31 +3,72 @@
 ## EXP-015c 8×8×10 第四阶段 (2026-03-19)
 
 - **配置**：experiments/configs/exp_015c_8x8x10_stage4.yaml
-- **Run**：TBD
-- **Source**：EXP-015b checkpoint（7×7×7 充分收敛后）
-- **步数**：6M（新棋盘从头计数，迁移 Conv 权重）
+- **Run**：mw_ppo_8x8x10_seed42_20260319080930
+- **Source**：EXP-015b checkpoint（7×7×7 @3.5M，Conv 权重迁移）
+- **步数**：6,012,928（~6M，新棋盘从头计数）
 - **目标**：eval_win_rate > 5%（显著超过 EXP-011b 的 1%）
+- **指标 (TensorBoard @6M)**：见 experiments/results/exp_015c_metrics.json
+- **指标 (Eval)**：eval_win_rate = **0%**（100 局，@6M final model）
+- **关键指标**：
+  - success_rate: 全程 0~2%，max 2%，final 1%（无上升趋势，全程平坦）
+  - ep_rew_mean: 1.24 → 2.20，max 2.47
+  - explained_variance: -0.98 → 0.51（从极负值爬升，说明 value 在学习但策略未突破）
+  - entropy_loss: -3.85 → -1.04（正常收敛）
+  - value_loss: 0.657 → 0.440（持续下降）
+- **分析**：
+  - EV 从 -0.98 缓慢爬升至 0.51，说明 value function 确实在学习状态价值，7×7 迁移权重有正迁移
+  - 但 success_rate 全程平坦（0~2%），policy 根本没有产生过有效的赢法——与 EXP-011b（直接 6×6→8×8）几乎无差异
+  - 根因不变：win/lose=±1.0 方差太大，在极稀疏的 win signal 下 value gradient 无效；即使给 policy 更充分的先验（7×7 中间台阶），8×8×10 的稀疏奖励仍然无法突破
+  - 更渐进的课程路径（5×5→6×6→7×7→8×8）相比直接跳跃（5×5→6×6→8×8）无显著改善
+- **结论**：eval 0%，方向 A5 穷尽。更渐进课程（5×5→6×6→7×7→8×8）无法突破 8×8×10 的稀疏奖励瓶颈，根因仍是终止信号幅度（±1.0）导致 value 梯度在极稀疏环境下无效。下一步转向 B4 reward 重标定：先在 5×5×3 上用小幅度 win/lose 恢复 EV=0.84，再验证是否能改善大棋盘训练。
 
 ---
 
 ## EXP-015b 7×7×7 中间台阶 (2026-03-19)
 
 - **配置**：experiments/configs/exp_015b_7x7x7_stage3.yaml
-- **Run**：TBD
-- **Source**：EXP-015a checkpoint（6×6×5 充分收敛后）
-- **步数**：3.5M（新棋盘从头计数，迁移 Conv 权重）
+- **Run**：mw_ppo_7x7x7_seed42_20260319072120
+- **Source**：EXP-015a checkpoint（6×6×5 @5M，Conv 权重迁移）
+- **步数**：3,506,176（~3.5M，新棋盘从头计数）
 - **目标**：eval_win_rate ≥ 40%，曲线 plateau 后转移至 015c
+- **指标 (TensorBoard @3.5M)**：见 experiments/results/exp_015b_metrics.json
+- **指标 (Eval)**：eval_win_rate = **16%**（100 局，@3.5M final model）
+- **关键指标**：
+  - success_rate: 0% → 11%，max 16%，final 11%（有学习但未达 40% 目标）
+  - ep_rew_mean: 1.15 → 2.34，max 2.47
+  - explained_variance: -0.49 → 0.44，max 0.58（比 8×8 好但仍偏低）
+  - entropy_loss: -3.50 → -1.01（正常收敛）
+  - value_loss: 0.686 → 0.536（持续下降）
+- **分析**：
+  - 16% eval 说明 7×7×7 比 8×8×10 容易，6×6 迁移权重有效，但距 40% 目标有较大差距
+  - success_rate 曲线在 3.5M 末期仍有上升趋势（未 plateau），继续训练可能突破 20-25%，但距 40% 仍遥远
+  - EV max 0.58 是课程路径中最好的，说明 7×7 比 8×8 的奖励密度更友好（7×7×7 随机完成率约 33%）
+  - 即便如此，16% 远低于目标，将此 checkpoint 迁移到 8×8×10 只是在迁移"半生不熟"的策略
+- **结论**：eval 16%，未达 40% 目标，但已是课程链中最高中间站。将 checkpoint 迁移至 015c（8×8×10）；7×7 证明更渐进路径确有边际改善（vs EXP-011b 直接 6×6→8×8），但幅度不足以突破根本瓶颈。
 
 ---
 
 ## EXP-015a 6×6×5 续训收敛 (2026-03-19)
 
 - **配置**：experiments/configs/exp_015a_6x6x5_continue.yaml
-- **Run**：TBD
+- **Run**：mw_ppo_6x6x5_seed42_20260318040414_continue_20260319064320
 - **Source**：EXP-011a checkpoint（mw_ppo_6x6x5_seed42_20260318040414 @2M）
-- **步数**：再续训 3M 步（累计约 5M 步在 6×6×5 上）
+- **步数**：5,029,888（续训 3M，累计约 5M 步在 6×6×5 上）
 - **目标**：eval_win_rate ≥ 60%，success_rate 曲线 plateau 后转移至 015b
 - **背景**：EXP-011b 失败根因——EXP-011a 只训 2M 步、win rate 38%，曲线未 plateau 就转移；且从 6×6(38%) 直接跳 8×8，跨度过大
+- **指标 (TensorBoard @5M)**：见 experiments/results/exp_015a_metrics.json
+- **指标 (Eval)**：eval_win_rate = **65%**（100 局，@5M final model）
+- **关键指标**：
+  - success_rate: 21% → 58%（续训段），max 65%，final 58%（曲线已 plateau）
+  - ep_rew_mean: 1.78 → 2.85，max 3.09
+  - explained_variance: final 0.23，max 0.32（偏低，同 EXP-004/007 在 win=1.0 下的结构性上限）
+  - entropy_loss: -0.84 → -0.53（策略收敛，探索减少）
+  - value_loss: 1.019 → 1.060（末期轻微上升，策略快速迭代时 value 跟不上）
+- **分析**：
+  - 65% eval 达到目标（≥60%），6×6×5 充分收敛，可作为 015b 迁移来源
+  - success_rate 曲线在续训后段趋于 plateau，说明 5M 步已充分挖掘 6×6×5 的潜力
+  - EV 0.23 偏低（win=1.0 的结构性问题），但对 policy 实际有效——65% eval 证明策略有实质改善
+- **结论**：eval 65%，达成 ≥60% 目标，6×6×5 充分收敛。将 final checkpoint 迁移至 015b（7×7×7）。
 
 ---
 

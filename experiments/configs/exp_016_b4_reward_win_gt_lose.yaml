@@ -1,0 +1,46 @@
+# EXP-016 B4-1 reward 重标定：还原 EXP-003 小幅度 win/lose
+# 假设：win=1.0/lose=-1.0 导致 explained_variance 卡在 0.2~0.45，
+#       缩小终止信号幅度至 EXP-003 原始值（win=0.2, lose=-0.05）
+#       可恢复 value function 可预测性（EV=0.84）并保持 eval 胜率对齐 EXP-007（87%）
+# 唯一变量（vs EXP-007）：reward_win 1.0→0.2，reward_lose -1.0→-0.05
+# 对比基准：EXP-007（双通道 + win=1.0/lose=-1.0 @2M = 87%，EV=0.43）
+#           EXP-003（单通道 + win=0.2/lose=-0.05 @2M = 83%，EV=0.84）
+# 成功标准：explained_variance ≥ 0.7，eval_win_rate ≥ 85%
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.2
+  reward_lose: -0.05
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 2_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
