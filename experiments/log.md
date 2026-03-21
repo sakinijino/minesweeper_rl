@@ -1,5 +1,52 @@
 # 实验日志
 
+## EXP-021 B3 n_envs=64 吞吐量验证 + A10 安全通道 —— 6×6×5（2026-03-21）
+
+配置 `experiments/configs/exp_021_b3_n_envs64_6x6x5.yaml`，Run `mw_ppo_6x6x5_seed42_20260321085207`，6M 步，从 EXP-019a 最优 checkpoint（`mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707` @ step 8,263,504）权重迁移，`TRANSFER_FROM` + `TRANSFER_STEPS=8263504`，Transferred 27 layers，Skipped 3 layers（Conv1 因 obs_channels 2→3 shape mismatch）。
+
+**核心变量**（vs EXP-020）：n_envs 16→64；（vs EXP-019a）：obs_channels 2→3，n_envs 16→64。
+
+**指标**：
+- TensorBoard：success_rate final 81% / max 81%（@6M 步），EV 0.62，entropy_loss -0.758，value_loss 0.358
+- 训练时间：**57 分钟**（vs EXP-020 的 64 分钟，快约 11%）
+- 吞吐量：fps≈5903（rollout 阶段），约为 EXP-020 n_envs=16 的 3-4x
+- Eval：final model **73.0%**（500 局）；best checkpoint（@5.998M）71.8%（500 局）——final 即最优
+
+**统计显著性**（与 EXP-019a 76.2% 对比，n=500 两比例 z 检验）：z=1.16，p=0.245，**不显著**。95% CI [69.1%, 76.9%] 与 EXP-019a [72.5%, 79.9%] 高度重叠。
+
+**分析**：n_envs=64 的吞吐量提升显著（rollout fps 约 4x），但最终精度 73% 低于 EXP-020（75.4%）和 EXP-019a（76.2%）基线。原因分析：
+1. n_envs=64 每次更新样本 65k（vs n_envs=16 的 16k），更新次数约为 1/4，在相同 wall-clock 时间内梯度更新步数更少
+2. 大 batch 在稀疏奖励环境下需要更大 LR 或更长训练才能充分利用样本
+3. 精度差异统计不显著（p=0.245），不能排除随机波动
+
+**结论**：⚠️ n_envs=64 在**速度**上有优势（57 min 内达到 73%），但**精度**未超过 n_envs=16 基线，差异不显著。若目标是快速迭代实验，n_envs=64 是合理选择；若追求最终精度，n_envs=16 配合更多步数更稳妥。不推荐单独使用 n_envs=64 作为最终训练配置，建议配合 LR 调整或更多步数。
+
+---
+
+## EXP-020 A10 约束传播安全通道验证 —— 6×6×5（2026-03-21）
+
+配置 `experiments/configs/exp_020_a10_safe_channel_6x6x5.yaml`，Run `mw_ppo_6x6x5_seed42_20260321085208`，6M 步，从 EXP-019a 最优 checkpoint（`mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707` @ step 8,263,504）权重迁移，`TRANSFER_FROM` + `TRANSFER_STEPS=8263504`，Transferred 27 layers，Skipped 3 layers（Conv1 因 obs_channels 2→3 shape mismatch）。
+
+**核心变量**（vs EXP-019a）：obs_channels 2→3（新增约束传播安全掩码通道），n_envs 不变（16）。
+
+**指标**：
+- TensorBoard：success_rate final 65% / max **82%**（@4.55M 步），EV 0.70，entropy_loss -0.536，value_loss 0.303
+- 训练时间：**64 分钟**
+- Eval（best checkpoint @4.55M）：**75.4%**（500 局）；final model（@6M）仅 65%（下滑）
+
+**训练曲线特征**：约 4.5M 步达到峰值 82%，之后明显下滑至 65%。下滑说明：(1) 模型在后期 overfitting 到某种局部策略；(2) 6M 步对当前配置略多，4-5M 步是最优停止点。
+
+**统计显著性**（best ckpt 75.4% vs EXP-019a 76.2%，n=500 两比例 z 检验）：z=0.30，p=0.768，**不显著**。95% CI [71.6%, 79.2%] 与 EXP-019a [72.5%, 79.9%] 完全重叠。
+
+**分析**：安全通道（obs_channels=3）在 4.55M 步达到 82%（TensorBoard），eval 75.4%，与 EXP-019a（8.6M 步，76.2%）**步数减少近一半**达到同等水平，说明安全通道**加速了早期收敛**。然而：
+1. 最终精度差异统计不显著（p=0.768），无法确认通道带来绝对精度提升
+2. Conv1 因 shape mismatch 被跳过（obs_channels 2→3），特征提取层实际上近乎重新学习，迁移效益主要来自 Linear+head
+3. 训练后期下滑可能与重新初始化的 Conv1 学习不稳定有关
+
+**结论**：⚠️ 安全通道可能**加速收敛**（约 4.5M 步即达同等水平），但最终精度提升不显著。最重要的发现是 **obs_channels=3 配置可行**，CNN 能正确利用第三通道。下一步应在 from-scratch 训练下验证（避免 shape mismatch 导致的 Conv1 重新学习），或在更大棋盘（7×7×7 / 8×8×10）上测试是否有更明显收益。
+
+---
+
 ## EXP-019c A6 课程学习 Stage4 —— 8×8×10（EXP-018 reward 配置）(2026-03-20)
 
 配置 `experiments/configs/exp_019c_a6_curriculum_8x8x10.yaml`，Run `mw_ppo_8x8x10_seed42_20260320110407`，8M 步（新棋盘从头计数），迁移自 EXP-019b 最优 checkpoint（`mw_ppo_7x7x7_seed42_20260320100042` @ step 4,500,000，eval 27%），`TRANSFER_FROM` + `TRANSFER_STEPS=4500000`，Transferred 25 layers，Skipped 5 layers。
