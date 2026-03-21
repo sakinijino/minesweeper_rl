@@ -1,0 +1,44 @@
+# EXP-024：5×5×3 Cosine LR
+# 核心变量（vs 023f）：lr_schedule=cosine, lr_end=0.0001
+# 目的：验证 cosine 衰减能否让收敛更稳定（EV 从 023f 的 0.74 提升，entropy 更平滑）
+# 对比基准：EXP-023f（n_envs=64, LR=1e-3, 500K steps, eval 85%）
+
+model_hyperparams:
+  learning_rate: 0.001
+  lr_schedule: "cosine"
+  lr_end: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 512
+  batch_size: 128
+  n_epochs: 4
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 3
+
+training_execution:
+  total_timesteps: 500_000
+  n_envs: 64
+  vec_env_type: "subproc"
+  checkpoint_freq: 25000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

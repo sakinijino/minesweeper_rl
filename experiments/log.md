@@ -32,6 +32,77 @@
 | EXP-021 | 6×6×5 | 6M | obs_ch=3，n_envs=64（from 019a） | **73.0%** | ⚠️ 57min 达同等水平，精度不优于基线（p=0.25） |
 | EXP-022 | 7×7×7 | 7M续训（共20M） | 延长至 20M 步 | **56%** | ✅ +4.4% vs 019b，entropy 未完全 plateau |
 | EXP-023f | 5×5×3 | 500K | obs_ch=3，n_envs=64，LR=1e-3 | **85%** | ✅ 与 EXP-018（2M步）持平，速度 4x，**新基线** |
+| EXP-024 | 5×5×3 | 500K | cosine LR（1e-3→1e-4，023f 配置不变） | **84.7%** | ⚠️ EV 小幅提升（0.74→0.78），eval 持平，短训练无必要 |
+| EXP-025 | 6×6×5 | 2M | TRANSFER 023f + constant LR=1e-3，n_envs=64，obs_ch=3 | **75%** | ⚠️ 2M步达75%，但振荡明显，LR过高无法收敛，不如 cosine |
+| EXP-026 | 6×6×5 | 2M | TRANSFER 023f + cosine LR（1e-3→1e-4），n_envs=64，obs_ch=3 | **77.7%** | ✅ 2M步持平 EXP-019a（77%@8.6M），步数减少77%，**新665基线** |
+
+---
+
+## EXP-025 / EXP-026 6×6×5 TRANSFER + 高 LR（2026-03-21）
+
+两组实验共用设计：TRANSFER_FROM EXP-023f（`mw_ppo_5x5x3_seed42_20260321115151`，5×5×3 eval 85%），迁移 Conv 25 层，LR 起点均为 1e-3，n_envs=64，obs_channels=3，2M steps。唯一变量：LR 调度方式。
+
+**EXP-025**（`exp_025_665_transfer_lr1e3.yaml`）：Run `mw_ppo_6x6x5_seed42_20260321124422`（第一次 run `20260321123538` 被 SIGKILL —— approx_kl 持续飙升至 0.10 引发 OOM，于 490K 步中断）
+**EXP-026**（`exp_026_665_transfer_cosine_lr.yaml`）：Run `mw_ppo_6x6x5_seed42_20260321123727`（一次完成，无中断）
+
+注：EXP-025 constant LR=1e-3 在 665 场景下 approx_kl 无法收敛，OOM 后重启；EXP-026 cosine LR 自然压制了 KL 发散，全程稳定运行。
+
+**指标对比**：
+
+| 指标 | EXP-025（constant LR） | EXP-026（cosine） | EXP-019a（旧基线） |
+|------|------------------------|-------------------|-------------------|
+| 步数 | 2M | 2M | **8.6M** |
+| Max SR | 76% | **82%** | — |
+| Final SR | 70% | **82%** | — |
+| EV（最终）| 0.697 | 0.693 | — |
+| entropy（最终）| -0.919 | **-0.892** | — |
+| clean eval（300局）| 75.0% | **77.7%** | **77%**（500局）|
+
+**训练曲线特征**：
+- EXP-025：approx_kl 全程 0.07-0.10（偏高），SR 振荡剧烈（0.13→0.42→0.28→0.42→0.33→0.42），说明 LR=1e-3 在 665 迁移场景下步子迈太大，无法稳定收敛
+- EXP-026：cosine 从 1e-3 衰减到 1e-4，KL 随之平稳下降，SR 曲线从 400K 步起单调爬升至 82%
+
+**分析**：
+1. **665 比 553 更需要 cosine**：553 短训练中 constant LR 胜出，但 665 的 action space 更大（36 格），高 LR 导致 KL 持续偏高、策略更新不稳定，cosine 衰减正好解决了这个问题
+2. **TRANSFER + cosine 的组合是关键**：迁移 Conv 权重给了好的特征起点，cosine 让策略在此基础上平稳精调，二者缺一不可
+3. **2M 步达到 EXP-019a 水平（77% @ 8.6M）**：步数减少 **77%**（8.6M→2M），wallclock 大幅降低
+4. **EXP-025 不是失败**：constant LR 的 75% 也已超过 EXP-015a（65%），但 cosine 版本在同等步数下明显更优
+
+**结论**：✅ EXP-026 确立新 6×6×5 基线：**TRANSFER_FROM 023f + cosine LR（1e-3→1e-4）+ n_envs=64 + obs_ch=3 + 2M steps → eval 77.7%**。后续 7×7×7 课程实验应以此为 Stage2 起点。
+
+---
+
+## EXP-024 5×5×3 Cosine LR（2026-03-21）
+
+配置 `experiments/configs/exp_024_553_cosine_lr.yaml`，Run `mw_ppo_5x5x3_seed42_20260321124701`（第一次 run `20260321123339` 被 Modal SIGKILL 后自动重启，两次训练曲线完全一致）。
+
+**核心变量**（vs EXP-023f）：`lr_schedule=cosine`，`lr_end=0.0001`，其余参数完全相同。
+
+**指标**：
+- TensorBoard：success_rate max **83%**（@491K），final **77%**，EV **0.784**，entropy_loss -1.40
+- Eval（@499K，300 局）：**84.7%**
+- 训练时间：~4.5 min（500K steps，fps≈1762-3006，重启后更快）
+
+**与 EXP-023f 对比**：
+
+| 指标 | EXP-023f（constant LR=1e-3） | EXP-024（cosine 1e-3→1e-4） |
+|------|------------------------------|------------------------------|
+| Max SR | **84%** | 83% |
+| Final SR | **81%** | 77% |
+| EV（最终）| 0.741 | **0.784** |
+| entropy（最终）| -1.429 | **-1.400** |
+| clean eval | **85.0%**（300局） | 84.7%（300局） |
+
+**训练曲线特征**：收敛轨迹与 023f 完全重合至约 230K 步（LR 仍接近 1e-3），此后随 LR 衰减开始分叉——SR 继续爬升但速度减慢，final SR 从峰值 83% 回落至 77%，说明 LR 过早降到低值切掉了后期探索能力。EV 提升是真实的（0.74→0.78），但不影响 eval 结果。
+
+**发现的 Bug**：cosine schedule 的 lambda 被 cloudpickle 序列化进 checkpoint 后，在本地 eval 时因 `math.cos` 作用域问题反序列化失败。已在 `src/factories/model_factory.py:load_model_from_checkpoint` 中加 `TypeError` fallback（`custom_objects={"learning_rate": 0.0001}`）修复。
+
+**分析**：
+1. **cosine 衰减在 500K 短训练中适得其反**：LR 在后 1/4 阶段（375K-500K）已降至 3e-4 以下，过快压制了探索，导致 final SR 比 constant LR 低 4%
+2. **EV 提升（+0.04）是真实信号但不实用**：value function 确实拟合更好，但在这个阶段不是瓶颈
+3. **cosine 更适合更长训练**：2M+ 步的 665 实验（EXP-026）才是 cosine 能发挥价值的场景
+
+**结论**：⚠️ EXP-024 eval（84.7%）与 EXP-023f（85.0%）统计持平，**5×5×3 短训练（500K步）维持 constant LR=1e-3 即可**，无需引入 cosine 调度。
 
 ---
 

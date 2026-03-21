@@ -165,18 +165,28 @@ def load_model_from_checkpoint(
     
     try:
         # Load the model
-        model = MaskablePPO.load(
-            checkpoint_path,
-            env=env,
-            device=device
-        )
-        
+        try:
+            model = MaskablePPO.load(
+                checkpoint_path,
+                env=env,
+                device=device
+            )
+        except TypeError:
+            # Fallback: cosine lr_schedule lambda may fail to deserialize across environments.
+            # Override with a constant lr to allow loading weights for eval.
+            model = MaskablePPO.load(
+                checkpoint_path,
+                env=env,
+                device=device,
+                custom_objects={"learning_rate": 0.0001}
+            )
+
         # Set tensorboard logging if specified
         if tensorboard_log is not None:
             model.tensorboard_log = tensorboard_log
-            
+
         return model
-        
+
     except Exception as e:
         raise ModelCreationError(f"Failed to load model from checkpoint: {checkpoint_path}") from e
 

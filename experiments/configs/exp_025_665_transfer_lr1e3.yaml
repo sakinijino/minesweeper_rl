@@ -1,0 +1,43 @@
+# EXP-025：6×6×5 TRANSFER_FROM 023f + 高 LR
+# TRANSFER_FROM: mw_ppo_5x5x3_seed42_20260321115151（EXP-023f，5×5×3，eval 85%）
+# 核心变量（vs EXP-019a）：LR 0.0001→1e-3，n_envs 16→64，n_steps 1024→512，n_epochs 8→4，obs_channels 2→3
+# 目的：验证新超参能否让 665 用 2M 步达到 EXP-019a 的 77%（旧方法需 8.6M 步）
+# 注意：TRANSFER_FROM 必须通过 CLI 传入：make train CONFIG=... TRANSFER_FROM=mw_ppo_5x5x3_seed42_20260321115151
+
+model_hyperparams:
+  learning_rate: 0.001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 512
+  batch_size: 128
+  n_epochs: 4
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 6
+  height: 6
+  n_mines: 5
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 3
+
+training_execution:
+  total_timesteps: 2_000_000
+  n_envs: 64
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
