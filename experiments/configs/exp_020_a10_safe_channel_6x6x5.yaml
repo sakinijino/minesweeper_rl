@@ -1,0 +1,46 @@
+# EXP-020：A10 约束传播安全通道验证 —— 6×6×5
+# 核心变量（vs EXP-019a）：obs_channels 2→3（新增确定性安全掩码通道）
+# 迁移源：EXP-019a continue 最终 checkpoint（6×6×5，77%）
+#   TRANSFER_FROM=mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707
+#   TRANSFER_STEPS=8263504
+# 预期：Conv1 因 channel 数不同被跳过，Conv2 + Linear + Policy/Value heads 全部迁移
+# 目标：eval ≥ 82%，或训练曲线明显更快收敛
+# 成功标准：对比 EXP-019a (77%)，同等步数下有显著提升才说明通道有效
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 6
+  height: 6
+  n_mines: 5
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 3
+
+training_execution:
+  total_timesteps: 6_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

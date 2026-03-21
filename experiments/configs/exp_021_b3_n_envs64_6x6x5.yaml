@@ -1,0 +1,46 @@
+# EXP-021：B3 n_envs 吞吐量测试 + A10 安全通道 —— 6×6×5
+# 核心变量（vs EXP-020）：n_envs 16→64
+# 目的：验证 n_envs=64 在 Modal T4 上的实际吞吐倍数（预期 2-4x steps/sec）
+# 迁移源：同 EXP-020（EXP-019a continue 最终 checkpoint）
+#   TRANSFER_FROM=mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707
+#   TRANSFER_STEPS=8263504
+# 注意：n_steps=1024 和 n_envs=64 → 每次更新 65536 样本，batch_size 保持 128
+# 对比指标：steps/sec（TensorBoard time/fps），eval 收敛速度和最终 eval
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 6
+  height: 6
+  n_mines: 5
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 3
+
+training_execution:
+  total_timesteps: 6_000_000
+  n_envs: 64
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

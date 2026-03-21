@@ -1,0 +1,44 @@
+# EXP-022：A9 7×7×7 延长训练至 20M 步
+# 从 EXP-019b-continue（51.6%，13M 步，熵仍在下降）继续
+# continue_from: mw_ppo_7x7x7_seed42_20260320100042_continue_20260320110730（13M）
+# 目标：确认 7×7×7 真实天花板（预期 60-70%）
+# 注意：仍使用 obs_channels=2（不加安全通道），保持对 019b 可比性
+# 额外步数：7M（total_timesteps 含义为"额外步数"，续训行为）
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 1024
+  batch_size: 128
+  n_epochs: 8
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 7
+  height: 7
+  n_mines: 7
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 2
+
+training_execution:
+  total_timesteps: 7_000_000
+  n_envs: 16
+  vec_env_type: "subproc"
+  checkpoint_freq: 50000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"

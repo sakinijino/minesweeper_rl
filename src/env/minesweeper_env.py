@@ -68,7 +68,73 @@ class MinesweeperEnv(gym.Env):
             # 双通道：ch0=未揭开掩码，ch1=已揭开数字（归一化）
             ch0 = (~self.revealed).astype(np.float32)  # 1.0=未揭开，0.0=已揭开
             ch1 = np.where(self.revealed, self.neighbor_counts / 8.0, 0.0).astype(np.float32)
-            return np.stack([ch0, ch1], axis=0)  # shape=(2, H, W)
+            if self.obs_channels == 2:
+                return np.stack([ch0, ch1], axis=0)  # shape=(2, H, W)
+            else:
+                # 三通道：ch2=约束传播安全掩码
+                ch2 = self.compute_safe_mask()
+                return np.stack([ch0, ch1, ch2], axis=0)  # shape=(3, H, W)
+
+    def compute_safe_mask(self) -> np.ndarray:
+        """
+        Returns a binary float32 mask of shape (H, W) where 1.0 indicates a cell
+        that is provably safe to click via single-pass constraint propagation.
+        Only unrevealed cells can be marked safe (revealed cells are always 0.0).
+
+        Two-pass algorithm:
+        Pass 1:
+          - For each revealed cell with count == 0: all unrevealed neighbors are safe.
+          - For each revealed cell with count == len(unrevealed_neighbors):
+            all unrevealed neighbors are certain mines.
+        Pass 2:
+          - For each revealed cell where count == number of certain-mine unrevealed neighbors:
+            remaining unrevealed neighbors are safe.
+        """
+        H, W = self.height, self.width
+        certain_mine = np.zeros((H, W), dtype=bool)
+        certain_safe = np.zeros((H, W), dtype=bool)
+
+        def get_unrevealed_neighbors(r, c):
+            neighbors = []
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < H and 0 <= nc < W and not self.revealed[nr, nc]:
+                        neighbors.append((nr, nc))
+            return neighbors
+
+        # Pass 1
+        for r in range(H):
+            for c in range(W):
+                if not self.revealed[r, c]:
+                    continue
+                k = self.neighbor_counts[r, c]
+                unrevealed = get_unrevealed_neighbors(r, c)
+                if k == 0:
+                    for (nr, nc) in unrevealed:
+                        certain_safe[nr, nc] = True
+                elif len(unrevealed) == k:
+                    for (nr, nc) in unrevealed:
+                        certain_mine[nr, nc] = True
+
+        # Pass 2: use certain_mine info to find additional safe cells
+        for r in range(H):
+            for c in range(W):
+                if not self.revealed[r, c]:
+                    continue
+                k = self.neighbor_counts[r, c]
+                unrevealed = get_unrevealed_neighbors(r, c)
+                mine_count_here = sum(1 for (nr, nc) in unrevealed if certain_mine[nr, nc])
+                if mine_count_here == k:
+                    for (nr, nc) in unrevealed:
+                        if not certain_mine[nr, nc]:
+                            certain_safe[nr, nc] = True
+
+        # Only unrevealed cells can be safe
+        safe_mask = np.where(~self.revealed, certain_safe.astype(np.float32), 0.0)
+        return safe_mask
 
     def _get_info(self):
         # 返回辅助信息，例如剩余地雷数、是否胜利等
