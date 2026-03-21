@@ -77,3 +77,31 @@ python play.py --mode human --width 8 --height 8 --n_mines 12  # 人机对战
 - config：`experiments/configs/exp_NNN_描述.yaml`
 - 结果：`experiments/results/exp_NNN_metrics.json`
 - log.md 中对应一节：`## EXP-NNN 描述 (YYYY-MM-DD)`
+
+## 续训（CONTINUE_FROM）步数规则
+
+**`total_timesteps` 在续训时表示额外步数**（代码已修复为此行为）：
+
+```bash
+# 从 5M 步模型再跑 5M 步 → 设 total_timesteps: 5_000_000
+make train CONFIG=exp_continue.yaml CONTINUE_FROM=<run_name>
+```
+
+- `CONTINUE_FROM`：同棋盘尺寸续训，继承所有权重和 VecNormalize stats
+- `TRANSFER_FROM`：跨棋盘尺寸迁移（新模型 + 迁移兼容层），必须通过 CLI 传入，不能只写在 YAML
+- YAML 中的 `continue_from` 字段**仅作文档注释用途**，不被 config 系统读取
+
+## 权重迁移规则
+
+| 场景 | 命令 | 说明 |
+|------|------|------|
+| 同棋盘续训 | `CONTINUE_FROM=<run>` | 继承所有权重 + stats，步数累加 |
+| 跨棋盘迁移 | `TRANSFER_FROM=<run> TRANSFER_STEPS=<N>` | 只迁移 Conv 权重（25 层），Linear/head 重新初始化 |
+
+典型迁移日志：`Transferred: 25 layers, Skipped: 5 layers (shape mismatch)` — 正常现象。
+
+## eval 注意事项
+
+- 7×7×7 及以上棋盘随机性高，eval 结果方差大：同一 ckpt 200 局 vs 500 局可能差 10%+
+- 推荐用 500 局作为最终 eval，300 局用于 ckpt 筛选
+- `make eval GAMES=500 CKPT_STEPS=<N> RUN=<run>` 支持自定义局数和 checkpoint

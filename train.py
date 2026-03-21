@@ -381,11 +381,13 @@ def run_training_loop(model, config_manager, checkpoint_callback, continue_train
     
     if continue_training:
         print("Continuing training from checkpoint...")
-        reset_timesteps = False
+        # reset_num_timesteps=True: total_timesteps is treated as ADDITIONAL steps
+        # This makes continue training intuitive: set total_timesteps to how many MORE steps you want
+        reset_timesteps = True
     else:
         print("Starting training from scratch...")
         reset_timesteps = True
-        
+
     try:
         model.learn(
             total_timesteps=config.training_execution.total_timesteps,
