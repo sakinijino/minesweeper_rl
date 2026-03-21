@@ -1,5 +1,28 @@
 # 实验日志
 
+## EXP-022 A9 7×7×7 延长训练至 20M 步（2026-03-21）
+
+配置 `experiments/configs/exp_022_a9_extend_7x7x7.yaml`，Run `mw_ppo_7x7x7_seed42_20260320100042_continue_20260320110730_continue_20260321090124`（因 Modal 抢占第一次中断后重启，`_continue_20260321085216` 仅完成 278k 步），7M 额外步数，从 EXP-019b-continue（`mw_ppo_7x7x7_seed42_20260320100042_continue_20260320110730`，13M 步，51.6%）`CONTINUE_FROM` 续训。
+
+**核心变量**（A9 延长训练）：步数 13M → 20M（额外 7M 步），其余配置与 EXP-019b 完全一致（obs_channels=2，reward ±0.1，n_envs=16）。
+
+**指标**：
+- TensorBoard（`continue_20260321090124`）：success_rate max **61%**（@3.7M / 5.4M additional steps），final 44%（高方差），EV 0.60-0.67，entropy_loss -0.466（从 -0.534 缓降，未 plateau）
+- 训练时间：约 80 分钟（7M 步，fps≈1463）
+- Eval（@5.35M additional steps）：**56.0%**（500 局）；@3.7M additional steps：55.2%（500 局）
+
+**训练曲线特征**：success_rate 在 3.5-5.5M additional steps 多次达到 0.59-0.61，但振荡剧烈（标准差约 ±0.05）。后期未见明显单调上升，可能接近短期局部最优，但 entropy 仍在缓慢下降说明未完全收敛。
+
+**分析**：
+1. 从 51.6%（13M 步）提升至 56.0%（20M 步），增量约 +4.4%，改善持续但趋于平缓
+2. 7×7×7 学习曲线很平坦，方差极大，需要大量步数才能确认趋势
+3. Entropy -0.466（vs 开始时 -0.534）还有下降空间，说明策略仍在收敛中
+4. EV 0.62 意味着 value function 仍未完美拟合，7×7×7 的随机性导致估值困难
+
+**结论**：✅ 延长训练有效，56% 是目前 7×7×7 的最优 eval；但天花板尚未确认（entropy 未 plateau）。若要确认真实上限，需要再续训 10M+ 步（到 30M 步左右）。当前 56% checkpoint 是 8×8×10 挑战的最强起始点。
+
+---
+
 ## EXP-021 B3 n_envs=64 吞吐量验证 + A10 安全通道 —— 6×6×5（2026-03-21）
 
 配置 `experiments/configs/exp_021_b3_n_envs64_6x6x5.yaml`，Run `mw_ppo_6x6x5_seed42_20260321085207`，6M 步，从 EXP-019a 最优 checkpoint（`mw_ppo_6x6x5_seed42_20260320072443_continue_20260320084707` @ step 8,263,504）权重迁移，`TRANSFER_FROM` + `TRANSFER_STEPS=8263504`，Transferred 27 layers，Skipped 3 layers（Conv1 因 obs_channels 2→3 shape mismatch）。
