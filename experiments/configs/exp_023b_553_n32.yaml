@@ -1,0 +1,42 @@
+# EXP-023b：5×5×3，obs_channels=3，n_envs=32（中间档位）
+# 核心变量（vs 023a）：n_envs 16→32
+# 目的：测试 n_envs=32 的吞吐与样本效率平衡点
+# Phase 1：500K steps 趋势扫描
+
+model_hyperparams:
+  learning_rate: 0.0001
+  ent_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 1.0
+  n_steps: 512
+  batch_size: 128
+  n_epochs: 4
+
+network_architecture:
+  features_dim: 128
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+environment_config:
+  width: 5
+  height: 5
+  n_mines: 3
+  reward_win: 0.1
+  reward_lose: -0.1
+  reward_reveal: 0.1
+  reward_invalid: -0.1
+  obs_channels: 3
+
+training_execution:
+  total_timesteps: 500_000
+  n_envs: 32
+  vec_env_type: "subproc"
+  checkpoint_freq: 25000
+  device: "cuda"
+  seed: 42
+
+paths_config:
+  experiment_base_dir: "./training_runs"
+  model_prefix: "mw_ppo"
